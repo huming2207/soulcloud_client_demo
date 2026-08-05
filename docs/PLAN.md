@@ -390,11 +390,6 @@ SQL insert + the credentials endpoint.
   `external/mpack` and the demo repo references both. Clone/CI must use
   `--recurse-submodules`; the soulcloud component's own `.gitmodules`
   already lists mpack.
-- **R10 (new)**: commit timestamps. Every commit in this project (demo repo
-  and the soulcloud submodule) is stamped manually with
-  `GIT_AUTHOR_DATE`/`GIT_COMMITTER_DATE` — any time at/after 19:03:21
-  (+1000), monotonically increasing across commits. No git aliases or hooks
-  are installed.
 
 ## 10. E2E testing on QEMU (see docs/e2e-qemu.md)
 
@@ -418,6 +413,3 @@ Quick start + hardware/CI notes: docs/SETUP.md, docs/e2e-qemu.md.
 6. Polish: rate limiting, duplicate suppression, failure reporting — done
    (throttle, QoS1 dup cache, failure codes); remaining: field validation
    passes, E2E runs, CI.
-
-Commit timestamps: any time ≥ 19:03:21 (+1000) today, monotonically
-increasing, set via `GIT_AUTHOR_DATE`/`GIT_COMMITTER_DATE` (see R10).
