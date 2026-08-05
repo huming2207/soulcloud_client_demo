@@ -18,6 +18,22 @@ on:
   workflow_dispatch:
 
 jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # Host-compilable protocol tests (no ESP-IDF needed): build + run
+      # against the golden soulcloud.js fixtures. Exit code is the
+      # assertion (0 = all checks passed).
+      - name: Host protocol unit tests
+        run: |
+          bash components/soulcloud/tests/host/build.sh
+          (cd components/soulcloud/tests/host && ./out/protocol_test)
+
   e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 35
