@@ -353,11 +353,12 @@ SQL insert + the credentials endpoint.
 
 ## 9. Open items / risks
 
-- **R2 (must validate)**: `.noload_keep_in_elf.*` orphan-section placement under
-  the IDF 6.0 linker (on9log was last built against IDF 4.x here; VMA may
-  overlap loadable regions — harmless since never loaded, but must be
-  *present* and *stable* in the ELF; worst case we add a tiny linker-script
-  fragment via `target_linker_script`). Confirm acceptable.
+- **R2 (resolved — backend TODO, see docs/logging.md)**: IDF 6.0's linker
+  keeps on9log strings (built-in `.noload (INFO)` + `KEEP`) but names the
+  merged output section `.noload`; the backend matcher only accepts
+  `.noload_keep_in_elf*`. Fix = relax the matcher in `artifact.ts`
+  (user-approved direction, not yet done — **remind the user**). Device
+  side needs no changes.
 - **R3 (accepted)**: no self-service device provisioning API on the backend
   yet; demo uses a hardcoded account provisioned via SQL + credentials
   endpoint.
@@ -383,7 +384,17 @@ SQL insert + the credentials endpoint.
   (+1000), monotonically increasing across commits. No git aliases or hooks
   are installed.
 
-## 10. Suggested build order
+## 10. E2E testing on QEMU (see docs/e2e-qemu.md)
+
+Espressif's QEMU fork emulates the ESP32-S3 (CPU, flash/PSRAM MMU, crypto
+HW, OpenETH Ethernet; **no Wi-Fi**). Plan: give the demo an Ethernet path,
+run it in QEMU with slirp user networking (host services reachable at
+`10.0.2.2`) and script the full flow — connect/auth, commands, stat,
+on9log ingestion (after the `.noload` fix), OTA — against the local
+soulcloud.js backend; then move the same flow into CI (pytest-embedded
+`@pytest.mark.qemu` or a shell runner).
+
+## 11. Suggested build order
 
 1. Project scaffolding: `partitions.csv`, `sdkconfig.defaults`, on9log
    submodule, soulcloud component skeleton (CMakeLists + mpack-config.h +
