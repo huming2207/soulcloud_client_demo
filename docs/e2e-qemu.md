@@ -61,14 +61,24 @@ etc. via `python $IDF_PATH/tools/idf_tools.py install qemu-xtensa`.
 
 ## E2E assertions (scripted)
 
-**One-shot runner: `scripts/run-e2e.sh`** (see CI below) — provisions a
-fresh device, builds v1/v2 firmware into `build/e2e/` (private SDKCONFIG,
-your normal build tree is untouched), boots QEMU, and asserts all six
-flows. Options: `--skip-ota`, `--skip-resilience`, `--keep-running`.
-Env: `SOULCLOUD_BACKEND_DIR`, `QEMU_BIN`, `E2E_UID`, `E2E_VERBOSE=1`.
+**Primary runner: pytest-embedded suite in `tests/e2e/`** (see CI below) —
+session fixtures bring up the backend (postgres + api + broker), provision
+a fresh device, build the Ethernet firmware into `build/e2e-pytest/`
+(private SDKCONFIG; the normal build tree is untouched), and each test
+boots a fresh QEMU and asserts one flow:
 
-The script owns every process it starts and cleans up on exit (including
-restoring `main/main.cpp` after the v2 OTA build).
+```sh
+python3 -m venv /tmp/e2e-venv
+/tmp/e2e-venv/bin/pip install -r tests/e2e/requirements.txt
+/tmp/e2e-venv/bin/pytest tests/e2e -v
+```
+
+Options/env: `SOULCLOUD_BACKEND_DIR`, `QEMU_BIN`, `E2E_UID`,
+`E2E_REUSE_BACKEND=1` (reuse an externally managed api/broker).
+
+A bash-only fallback runner is still available: `scripts/run-e2e.sh`
+(provisions, builds v1/v2, boots QEMU, asserts everything in one go;
+`--skip-ota`, `--skip-resilience`, `--keep-running`).
 
 1. **Connect/auth**: device appears in the broker; wrong password → refused
    + backoff.
@@ -86,17 +96,19 @@ restoring `main/main.cpp` after the v2 OTA build).
 
 ## CI (GitHub Actions)
 
-`.github/workflows/e2e-qemu.yml` runs the same flow on `ubuntu-latest`:
+`.github/workflows/e2e-qemu.yml` runs the pytest suite on `ubuntu-latest`:
 
 - checkout (recursive submodules) → `oven-sh/setup-bun` →
-  `espressif/idf-action` (IDF 6.0.2, esp32s3) →
+  `espressif/install-esp-idf-action` (IDF 6.0.2) →
   `idf_tools.py install qemu-xtensa`
-- clones `soulcloudjs` (needs the `.flash.rodata` tag-extraction fix,
+- clones `soulcloud.js` (needs the `.flash.rodata` tag-extraction fix,
   commit ≥ ccc7bce — fail-fast check in the workflow), `bun install`,
-  `docker compose up -d --wait postgres`, `db:deploy`
-- `SOULCLOUD_BACKEND_DIR` points at the clone and `scripts/run-e2e.sh`
-  runs the full flow; `E2E_VERBOSE=1` and the `e2e-logs` artifact upload
-  make failures diagnosable.
+  `docker compose up -d --wait postgres`, `db:generate` + `db:deploy`
+- `python3 -m venv` + `pip install -r tests/e2e/requirements.txt`
+- `SOULCLOUD_BACKEND_DIR` points at the clone and
+  `pytest tests/e2e -v` runs the suite; on failure the backend logs and
+  `/tmp/pytest-embedded/**/*.log` (device serial) are uploaded as the
+  `e2e-logs` artifact.
 
 Known quirks (all handled by the script/workflow):
 
@@ -116,7 +128,9 @@ Known quirks (all handled by the script/workflow):
 - [x] device provisioning helper: `scripts/provision-device.sh`
 - [x] E2E runner script (start backend → qemu → assert):
       `scripts/run-e2e.sh` — local run green (2026-08-05)
-- [x] CI workflow: `.github/workflows/e2e-qemu.yml` — **green on GitHub
-      Actions (2026-08-05)**: install-esp-idf-action (IDF 6.0.2) +
-      idf_tools qemu-xtensa + backend clone (needs soulcloud.js ≥
-      ccc7bce) + postgres + `scripts/run-e2e.sh`.
+- [x] pytest-embedded suite (`tests/e2e/`) with per-flow test cases:
+      connect/stat, command, log decode, OTA, resilience — local run
+      green (2026-08-06)
+- [x] CI workflow: `.github/workflows/e2e-qemu.yml` — green on GitHub
+      Actions (2026-08-05) via run-e2e.sh; switched to the pytest suite
+      (needs soulcloud.js ≥ ccc7bce).

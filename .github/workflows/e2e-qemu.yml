@@ -2,7 +2,9 @@ name: e2e-qemu
 
 # Full E2E against the soulcloud.js backend in Espressif's ESP32-S3 QEMU:
 # connect/auth, commands, stat.fw==buildId, on9log log decode, OTA,
-# broker-restart resilience. Runs scripts/run-e2e.sh in a clean runner.
+# broker-restart resilience. Runs the pytest-embedded suite in
+# tests/e2e/ on a clean runner (scripts/run-e2e.sh remains as a
+# bash-only fallback entry point).
 #
 # The backend is cloned from github.com/huming2207/soulcloud.js (public
 # repo; a SOULCLOUDJS_PAT secret is still honoured if it ever goes
@@ -43,28 +45,33 @@ jobs:
           SOULCLOUDJS_PAT: ${{ secrets.SOULCLOUDJS_PAT }}
         run: |
           if [ -n "$SOULCLOUDJS_PAT" ]; then
-            git clone --depth 1 "https://${SOULCLOUDJS_PAT}@github.com/huming2207/soulcloud.js" "$RUNNER_TEMP/soulcloudjs"
+            git clone --depth 1 "https://${SOULCLOUDJS_PAT}@github.com/huming2207/soulcloud.js" "$RUNNER_TEMP/soulcloud.js"
           else
             echo "::warning::no SOULCLOUDJS_PAT secret; trying public clone"
-            git clone --depth 1 https://github.com/huming2207/soulcloud.js "$RUNNER_TEMP/soulcloudjs"
+            git clone --depth 1 https://github.com/huming2207/soulcloud.js "$RUNNER_TEMP/soulcloud.js"
           fi
-          grep -q 'flash\.rodata' "$RUNNER_TEMP/soulcloudjs/packages/core/src/logging/artifact.ts" \
-            || { echo "::error::soulcloudjs is missing the .flash.rodata tag-extraction fix (need >= ccc7bce); push it first"; exit 1; }
+          grep -q 'flash\.rodata' "$RUNNER_TEMP/soulcloud.js/packages/core/src/logging/artifact.ts" \
+            || { echo "::error::soulcloud.js is missing the .flash.rodata tag-extraction fix (need >= ccc7bce); push it first"; exit 1; }
 
       - name: Backend install + postgres + migrate
         run: |
-          cd "$RUNNER_TEMP/soulcloudjs"
+          cd "$RUNNER_TEMP/soulcloud.js"
           bun install
           docker compose up -d --wait postgres
+          DATABASE_URL="postgres://soulcloud:soulcloud@127.0.0.1:5432/soulcloud" bun run db:generate
           DATABASE_URL="postgres://soulcloud:soulcloud@127.0.0.1:5432/soulcloud" bun run db:deploy
 
-      - name: Run E2E
-        env:
-          SOULCLOUD_BACKEND_DIR: ${{ runner.temp }}/soulcloudjs
-          DATABASE_URL: "postgres://soulcloud:soulcloud@127.0.0.1:5432/soulcloud"
-          E2E_VERBOSE: "1"
+      - name: Install E2E test deps
         run: |
-          ./scripts/run-e2e.sh
+          python3 -m venv /tmp/e2e-venv
+          /tmp/e2e-venv/bin/pip install -q -r tests/e2e/requirements.txt
+
+      - name: Run E2E (pytest-embedded)
+        env:
+          SOULCLOUD_BACKEND_DIR: ${{ runner.temp }}/soulcloud.js
+          DATABASE_URL: "postgres://soulcloud:soulcloud@127.0.0.1:5432/soulcloud"
+        run: |
+          /tmp/e2e-venv/bin/pytest tests/e2e -v
 
       - name: Upload E2E artifacts (on failure)
         if: failure()
@@ -72,8 +79,7 @@ jobs:
         with:
           name: e2e-logs
           path: |
-            build/e2e/qemu.serial
-            build/e2e/qemu.log
-            build/e2e/api.log
-            build/e2e/broker.log
+            build/e2e-artifacts/api.log
+            build/e2e-artifacts/broker.log
+            /tmp/pytest-embedded/**/*.log
           if-no-files-found: ignore
