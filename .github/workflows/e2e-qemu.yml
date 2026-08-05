@@ -52,8 +52,8 @@ jobs:
             || { echo "::error::soulcloudjs is missing the .flash.rodata tag-extraction fix (need >= ccc7bce); push it first"; exit 1; }
 
       - name: Backend install + postgres + migrate
-        working-directory: "$RUNNER_TEMP/soulcloudjs"
         run: |
+          cd "$RUNNER_TEMP/soulcloudjs"
           bun install
           docker compose up -d --wait postgres
           DATABASE_URL="postgres://soulcloud:soulcloud@127.0.0.1:5432/soulcloud" bun run db:deploy
