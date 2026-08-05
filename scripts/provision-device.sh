@@ -28,12 +28,12 @@ PSQL_CMD="${PSQL_CMD:-docker exec -i soulcloudjs-postgres-1 psql -U soulcloud -d
 
 run_psql() {
   # shellcheck disable=SC2086
-  bash -c "$PSQL_CMD" "$@"
+  bash -c "$PSQL_CMD $*"
 }
 
 json_field() {
   # json_field <json> <field> -> prints the string value
-  python3 -c "import json,sys; print(json.load(sys.argv[1])[sys.argv[2]])" "$1" "$2"
+  python3 -c "import json,sys; print(json.loads(sys.argv[1])[sys.argv[2]])" "$1" "$2"
 }
 
 echo "== registering user $USERNAME =="

@@ -104,12 +104,16 @@ esp_err_t demo_app::init()
     ESP_ERROR_CHECK(nvs_flash_init());
 
     // on9log: core + UART/VFS sink for local debugging; the MQTT sink
-    // (component) is layered on top later
+    // (component) is layered on top later. The UART/VFS sink is skipped in
+    // the Ethernet/QEMU build: there is no serial host decoder there, and
+    // the raw SLIP stream would drown the console logs on the emulated UART.
     if (on9log_init() != ON9LOG_OK) {
         ESP_LOGE(TAG, "on9log_init failed");
         return ESP_FAIL;
     }
+#if !CONFIG_SOULCLOUD_DEMO_NET_ETH
     ESP_ERROR_CHECK(on9log_esp_vfs_init());
+#endif
 
     // network stack
     ESP_ERROR_CHECK(esp_netif_init());
@@ -129,7 +133,10 @@ esp_err_t demo_app::eth_connect()
     // OpenCores Ethernet (only exists in QEMU)
     eth_mac_config_t mac_config = ETH_MAC_DEFAULT_CONFIG();
     eth_phy_config_t phy_config = ETH_PHY_DEFAULT_CONFIG();
-    phy_config.phy_addr = 0;
+    // QEMU's openeth model only answers MII accesses for PHY address 1
+    // (DEFAULT_PHY in hw/net/opencores_eth.c); address 0 returns 0xffff,
+    // which trips the 802.3 power-up poll in esp_eth_phy_802_3_pwrctl.
+    phy_config.phy_addr = 1;
     phy_config.reset_gpio_num = -1;
 
     esp_eth_mac_t *mac = esp_eth_mac_new_openeth(&mac_config);
@@ -240,8 +247,8 @@ void demo_app::run_loop()
 {
     uint32_t tick = 0;
     for (;;) {
-        // periodic telemetry (binary on9log -> UART now, MQTT via the
-        // component's log sink)
+        // periodic telemetry (binary on9log -> MQTT via the component's log
+        // sink)
         ON9_LOGI(TAG, "tick=%u uptime=%llds heap=%u",
                  tick,
                  (long long)(esp_timer_get_time() / 1000000),

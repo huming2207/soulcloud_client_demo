@@ -1,7 +1,14 @@
 # QEMU (esp32s3) build: Ethernet (OpenETH) instead of Wi-Fi, backend via
 # the slirp user-net gateway (10.0.2.2 = the host running postgres/api/broker).
 # Build with: idf.py -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.eth" build
+# QEMU's emulated PSRAM is Quad SPI by default (APS6404); the real devkit's
+# Octal PSRAM is covered by the WiFi (hardware) build.
+CONFIG_SPIRAM_MODE_QUAD=y
 CONFIG_SOULCLOUD_DEMO_NET_ETH=y
+# QEMU slirp can burst frames faster than the OpenETH DMA drains them;
+# the default 4 RX buffers drop frames during large HTTP downloads (OTA),
+# so bump the RX pool for the emulated NIC.
+CONFIG_ETH_OPENETH_DMA_RX_BUFFER_NUM=32
 # CONFIG_SOULCLOUD_DEMO_NET_WIFI is not set
 
 CONFIG_SOULCLOUD_BROKER_URI="ws://10.0.2.2:1883/mqtt"
@@ -9,5 +16,8 @@ CONFIG_SOULCLOUD_API_BASE_URL="http://10.0.2.2:8080"
 
 # QEMU has no real NVS persistence unless a flash image is reused; keep the
 # device config baked in (Kconfig defaults) for the first boot.
+# Bake the demo device credentials here after running
+# scripts/provision-device.sh qemu-demo-0001 (the password is shown once).
+# The placeholder below will NOT authenticate against the backend.
 CONFIG_SOULCLOUD_DEVICE_UID="qemu-demo-0001"
 CONFIG_SOULCLOUD_DEVICE_PASSWORD="qemu-demo-secret"

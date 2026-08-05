@@ -2,6 +2,12 @@
 CONFIG_IDF_TARGET="esp32s3"
 CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
 
+# stat.fw must carry the FULL ELF SHA-256 (32 bytes) so the backend can
+# match it against firmware_artifacts.buildId (OTA completion + log decode).
+# IDF's default IDF divides the RAM buffer (len+1) by two when converting hex,
+# so len=32 would still yield only 16 bytes; 64 yields the full 32 bytes.
+CONFIG_APP_RETRIEVE_LEN_ELF_SHA=64
+
 # PSRAM (octal, 80 MHz, auto-detect type)
 CONFIG_SPIRAM=y
 CONFIG_SPIRAM_MODE_OCT=y
