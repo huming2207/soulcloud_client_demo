@@ -2,3 +2,8 @@ build/
 managed_components/
 sdkconfig
 sdkconfig.old
+
+# python
+__pycache__/
+*.pyc
+.pytest_cache/
