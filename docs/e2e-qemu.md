@@ -116,5 +116,7 @@ Known quirks (all handled by the script/workflow):
 - [x] device provisioning helper: `scripts/provision-device.sh`
 - [x] E2E runner script (start backend → qemu → assert):
       `scripts/run-e2e.sh` — local run green (2026-08-05)
-- [x] CI workflow: `.github/workflows/e2e-qemu.yml` (needs soulcloudjs
-      ≥ ccc7bce pushed, and the demo + submodule commits pushed)
+- [x] CI workflow: `.github/workflows/e2e-qemu.yml` — **green on GitHub
+      Actions (2026-08-05)**: install-esp-idf-action (IDF 6.0.2) +
+      idf_tools qemu-xtensa + backend clone (needs soulcloud.js ≥
+      ccc7bce) + postgres + `scripts/run-e2e.sh`.
