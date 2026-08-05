@@ -148,6 +148,8 @@ log "starting backend ($BACKEND_DIR)"
 if ! curl -fsS -m 2 "$API_URL/health/ready" >/dev/null 2>&1; then
     (cd "$BACKEND_DIR" && bun install >/dev/null)
     (cd "$BACKEND_DIR" && docker compose up -d --wait postgres)
+    # fresh clones have no prisma client yet; generate before migrate
+    (cd "$BACKEND_DIR" && DATABASE_URL="$DATABASE_URL" bun run db:generate >/dev/null)
     (cd "$BACKEND_DIR" && DATABASE_URL="$DATABASE_URL" bun run db:deploy >/dev/null)
     JWT_SECRET="${JWT_SECRET:-$(openssl rand -base64 48)}"
     export JWT_SECRET DATABASE_URL
