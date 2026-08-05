@@ -91,8 +91,9 @@ etc. via `python $IDF_PATH/tools/idf_tools.py install qemu-xtensa`.
 
 ## TODOs
 
-- [ ] demo_app: Ethernet (OpenETH) network path + Kconfig switch
-- [ ] backend `.noload` matcher fix (docs/logging.md) — needed for log E2E
-- [ ] device provisioning helper for E2E (SQL + credentials script)
-- [ ] E2E runner script (start backend → qemu → assert)
+- [x] demo_app: Ethernet (OpenETH) network path + Kconfig switch
+- [x] backend `.noload` matcher fix (soulcloud.js 4352fa2, docs/logging.md)
+- [x] device provisioning helper: `scripts/provision-device.sh`
+- [ ] E2E runner script (start backend → qemu → assert) — see
+      docs/SETUP.md for the pieces; wire-up next
 - [ ] CI workflow (optional, after local E2E is green)

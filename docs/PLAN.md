@@ -1,5 +1,17 @@
 # PLAN: ESP32 Soulcloud Device Client
 
+## Status (2026-08-05)
+
+- Implemented and building: protocol layer (MPack, host-tested 91 checks),
+  client core (lifecycle, config_store, command_registry, mqtt_bridge),
+  on9log MQTT sink, OTA executor, demo app (WiFi + Ethernet/OpenETH),
+  ESP32-S3 target with 8 MB partition table + PSRAM.
+- Backend `.noload` incompatibility fixed upstream (soulcloud.js 4352fa2) —
+  see docs/logging.md. Device side needed no changes.
+- Remaining: hardware/QEMU bring-up and E2E runs — see docs/SETUP.md and
+  docs/e2e-qemu.md.
+- Onboarding a fresh machine: follow docs/SETUP.md.
+
 ## 1. Goal
 
 Build a reusable ESP-IDF component `components/soulcloud` that turns an
@@ -387,25 +399,25 @@ SQL insert + the credentials endpoint.
 ## 10. E2E testing on QEMU (see docs/e2e-qemu.md)
 
 Espressif's QEMU fork emulates the ESP32-S3 (CPU, flash/PSRAM MMU, crypto
-HW, OpenETH Ethernet; **no Wi-Fi**). Plan: give the demo an Ethernet path,
-run it in QEMU with slirp user networking (host services reachable at
-`10.0.2.2`) and script the full flow — connect/auth, commands, stat,
-on9log ingestion (after the `.noload` fix), OTA — against the local
-soulcloud.js backend; then move the same flow into CI (pytest-embedded
-`@pytest.mark.qemu` or a shell runner).
+HW, OpenETH Ethernet; **no Wi-Fi**). The demo now has an Ethernet path
+(`sdkconfig.defaults.eth`) and the `.noload` backend fix is landed, so the
+full flow — connect/auth, commands, stat, on9log ingestion, OTA — can run
+against the local soulcloud.js backend in QEMU (slirp gateway `10.0.2.2`).
+Quick start + hardware/CI notes: docs/SETUP.md, docs/e2e-qemu.md.
 
 ## 11. Suggested build order
 
-1. Project scaffolding: `partitions.csv`, `sdkconfig.defaults`, on9log
-   submodule, soulcloud component skeleton (CMakeLists + mpack-config.h +
-   mpack build); verify the project builds with the current hello-world main.
-2. `protocol.cpp` on top of MPack + host-compilable self-tests.
-3. `mqtt_bridge` + stat/cmd/ota message builders; demo connects and answers
-   `getInfo` → **milestone: command loop works end to end**.
-4. `logs.cpp` on9log MQTT sink + `.noload` validation → ELF dictionary + log
-   decode works.
-5. `ota.cpp` → full OTA loop works.
-6. Polish: rate limiting, duplicate suppression, failure reporting, docs.
+1. ~~Project scaffolding~~ — done (partitions.csv, sdkconfig.defaults,
+   on9log + mpack submodules, MPack build).
+2. ~~protocol layer on MPack~~ — done, host tests (91 checks) green.
+3. ~~mqtt_bridge + stat/cmd/ota + command loop~~ — done in code; end-to-end
+   run pending hardware/QEMU (docs/SETUP.md).
+4. ~~logs.cpp on9log MQTT sink~~ — done; `.noload` backend fix landed
+   (soulcloud.js 4352fa2).
+5. ~~ota.cpp~~ — done in code; OTA E2E pending QEMU/hardware.
+6. Polish: rate limiting, duplicate suppression, failure reporting — done
+   (throttle, QoS1 dup cache, failure codes); remaining: field validation
+   passes, E2E runs, CI.
 
 Commit timestamps: any time ≥ 19:03:21 (+1000) today, monotonically
 increasing, set via `GIT_AUTHOR_DATE`/`GIT_COMMITTER_DATE` (see R10).
