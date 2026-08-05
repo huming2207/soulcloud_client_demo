@@ -1,0 +1,74 @@
+name: e2e-qemu
+
+# Full E2E against the soulcloud.js backend in Espressif's ESP32-S3 QEMU:
+# connect/auth, commands, stat.fw==buildId, on9log log decode, OTA,
+# broker-restart resilience. Runs scripts/run-e2e.sh in a clean runner.
+#
+# The backend is cloned from github.com/huming2207/soulcloudjs and MUST
+# include the .flash.rodata tag-extraction fix (>= ccc7bce) — the workflow
+# fails fast with a clear message if it is missing.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.13
+
+      # Installs ESP-IDF 6.0.2 + the xtensa-esp32s3 toolchain on the runner
+      # and exports IDF_PATH for the subsequent steps.
+      - uses: espressif/idf-action@v1
+        with:
+          idf_version: v6.0.2
+          target: esp32s3
+
+      - name: Install QEMU (Espressif fork)
+        run: |
+          source "$IDF_PATH/export.sh"
+          python "$IDF_PATH/tools/idf_tools.py" install qemu-xtensa
+
+      - name: Clone backend
+        run: |
+          git clone --depth 1 https://github.com/huming2207/soulcloudjs "$RUNNER_TEMP/soulcloudjs"
+          grep -q 'flash\.rodata' "$RUNNER_TEMP/soulcloudjs/packages/core/src/logging/artifact.ts" \
+            || { echo "::error::soulcloudjs is missing the .flash.rodata tag-extraction fix (need >= ccc7bce); push it first"; exit 1; }
+
+      - name: Backend install + postgres + migrate
+        working-directory: "$RUNNER_TEMP/soulcloudjs"
+        run: |
+          bun install
+          docker compose up -d --wait postgres
+          DATABASE_URL="postgres://soulcloud:soulcloud@127.0.0.1:5432/soulcloud" bun run db:deploy
+
+      - name: Run E2E
+        env:
+          SOULCLOUD_BACKEND_DIR: "$RUNNER_TEMP/soulcloudjs"
+          DATABASE_URL: "postgres://soulcloud:soulcloud@127.0.0.1:5432/soulcloud"
+          E2E_VERBOSE: "1"
+        run: |
+          source "$IDF_PATH/export.sh"
+          ./scripts/run-e2e.sh
+
+      - name: Upload E2E artifacts (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-logs
+          path: |
+            build/e2e/qemu.serial
+            build/e2e/qemu.log
+            build/e2e/api.log
+            build/e2e/broker.log
+          if-no-files-found: ignore

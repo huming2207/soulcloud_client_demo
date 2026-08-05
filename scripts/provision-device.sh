@@ -64,6 +64,7 @@ MQTT_USER=$(json_field "$CRED" mqtt_username)
 MQTT_PASS=$(json_field "$CRED" mqtt_password)
 
 echo
+
 echo "==================== device provisioning complete ===================="
 echo "  device_uid     (MQTT username + client id): $MQTT_USER"
 echo "  mqtt password  (shown once, store it):      $MQTT_PASS"
@@ -75,3 +76,13 @@ echo "Fill these into sdkconfig (or NVS via the setConfig command):"
 echo "  CONFIG_SOULCLOUD_DEVICE_UID=\"$MQTT_USER\""
 echo "  CONFIG_SOULCLOUD_DEVICE_PASSWORD=\"$MQTT_PASS\""
 echo "======================================================================"
+
+# Machine-readable block for scripts (run-e2e.sh). Field names are stable.
+echo "--- e2e ---"
+echo "device_uid=$MQTT_USER"
+echo "device_password=$MQTT_PASS"
+echo "device_id=$DEVICE_ID"
+echo "project_id=$PROJECT_ID"
+echo "user=$USERNAME"
+echo "user_password=$PASSWORD"
+echo "access_token=$TOKEN"

@@ -61,6 +61,15 @@ etc. via `python $IDF_PATH/tools/idf_tools.py install qemu-xtensa`.
 
 ## E2E assertions (scripted)
 
+**One-shot runner: `scripts/run-e2e.sh`** (see CI below) — provisions a
+fresh device, builds v1/v2 firmware into `build/e2e/` (private SDKCONFIG,
+your normal build tree is untouched), boots QEMU, and asserts all six
+flows. Options: `--skip-ota`, `--skip-resilience`, `--keep-running`.
+Env: `SOULCLOUD_BACKEND_DIR`, `QEMU_BIN`, `E2E_UID`, `E2E_VERBOSE=1`.
+
+The script owns every process it starts and cleans up on exit (including
+restoring `main/main.cpp` after the v2 OTA build).
+
 1. **Connect/auth**: device appears in the broker; wrong password → refused
    + backoff.
 2. **Commands**: `POST /v1/command-batches` `getInfo` → device answers →
@@ -68,32 +77,44 @@ etc. via `python $IDF_PATH/tools/idf_tools.py install qemu-xtensa`.
 3. **stat**: `/devices/:id/firmware-state` shows `fw` == uploaded artifact
    `buildId` (elf sha256).
 4. **Logs**: device `ON9_LOGI` packets ingested; `GET /devices/:id/logs`
-   decodes tag/fmt/args (blocked until the `.noload` matcher fix — see
-   docs/logging.md).
+   decodes tag/fmt/args against the artifact dictionary.
 5. **OTA**: build v2 → upload release (bin+elf) → `POST .../deploy` → device
    downloads, verifies SHA-256, flashes ota_1, restarts → new `stat.fw` →
    target `completed` in `GET /ota-jobs/:id`.
 6. **Resilience**: kill/restart broker while the device runs → reconnect +
    command delivery resumes.
 
-## CI sketch (GitHub Actions)
+## CI (GitHub Actions)
 
-- Job: `ubuntu-latest`, services: postgres; steps:
-  - checkout with `--recurse-submodules`
-  - setup `espressif/idf` docker image (or `idf-build-apps` + manual QEMU
-    install: `idf_tools.py install qemu-xtensa`)
-  - install + migrate soulcloud.js backend, start api + broker
-  - build demo (ethernet config), `merge-bin`
-  - start QEMU with `-serial tcp::5555,server,nowait` (or pipe) and run the
-    assertion script (bash or pytest).
-- Alternative structured approach: `pytest-embedded` with the `@pytest.mark.qemu`
-  marker (Espressif's own pattern) driving both QEMU and the backend.
+`.github/workflows/e2e-qemu.yml` runs the same flow on `ubuntu-latest`:
+
+- checkout (recursive submodules) → `oven-sh/setup-bun` →
+  `espressif/idf-action` (IDF 6.0.2, esp32s3) →
+  `idf_tools.py install qemu-xtensa`
+- clones `soulcloudjs` (needs the `.flash.rodata` tag-extraction fix,
+  commit ≥ ccc7bce — fail-fast check in the workflow), `bun install`,
+  `docker compose up -d --wait postgres`, `db:deploy`
+- `SOULCLOUD_BACKEND_DIR` points at the clone and `scripts/run-e2e.sh`
+  runs the full flow; `E2E_VERBOSE=1` and the `e2e-logs` artifact upload
+  make failures diagnosable.
+
+Known quirks (all handled by the script/workflow):
+
+- QEMU's emulated PSRAM is **Quad SPI** (APS6404) → the Ethernet build
+  forces `CONFIG_SPIRAM_MODE_QUAD`; the devkit's Octal PSRAM stays in the
+  WiFi (hardware) build.
+- QEMU's openeth model only answers MII for **PHY address 1**.
+- `CONFIG_APP_RETRIEVE_LEN_ELF_SHA=64` (IDF's `(len+1)/2` hex conversion
+  halves len=32, so 64 is required for the full 32-byte `stat.fw`).
+- OpenETH RX pool is raised to 32 buffers (`ETH_OPENETH_DMA_RX_BUFFER_NUM`)
+  or large OTA downloads drop frames.
 
 ## TODOs
 
 - [x] demo_app: Ethernet (OpenETH) network path + Kconfig switch
 - [x] backend `.noload` matcher fix (soulcloud.js 4352fa2, docs/logging.md)
 - [x] device provisioning helper: `scripts/provision-device.sh`
-- [ ] E2E runner script (start backend → qemu → assert) — see
-      docs/SETUP.md for the pieces; wire-up next
-- [ ] CI workflow (optional, after local E2E is green)
+- [x] E2E runner script (start backend → qemu → assert):
+      `scripts/run-e2e.sh` — local run green (2026-08-05)
+- [x] CI workflow: `.github/workflows/e2e-qemu.yml` (needs soulcloudjs
+      ≥ ccc7bce pushed, and the demo + submodule commits pushed)
