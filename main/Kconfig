@@ -1,11 +1,27 @@
 menu "Soulcloud demo"
 
+    choice SOULCLOUD_DEMO_NET_IF
+        prompt "Network interface"
+        default SOULCLOUD_DEMO_NET_WIFI
+        help
+            WiFi STA for real hardware; Ethernet (OpenETH) for QEMU
+            (QEMU does not emulate Wi-Fi).
+
+        config SOULCLOUD_DEMO_NET_WIFI
+            bool "WiFi STA"
+
+        config SOULCLOUD_DEMO_NET_ETH
+            bool "Ethernet (OpenETH, QEMU)"
+    endchoice
+
     config SOULCLOUD_DEMO_WIFI_SSID
         string "WiFi SSID"
         default "myssid"
+        depends on SOULCLOUD_DEMO_NET_WIFI
 
     config SOULCLOUD_DEMO_WIFI_PASSWORD
         string "WiFi password"
         default ""
+        depends on SOULCLOUD_DEMO_NET_WIFI
 
 endmenu

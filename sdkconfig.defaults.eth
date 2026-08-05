@@ -1,0 +1,13 @@
+# QEMU (esp32s3) build: Ethernet (OpenETH) instead of Wi-Fi, backend via
+# the slirp user-net gateway (10.0.2.2 = the host running postgres/api/broker).
+# Build with: idf.py -DSDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.eth" build
+CONFIG_SOULCLOUD_DEMO_NET_ETH=y
+# CONFIG_SOULCLOUD_DEMO_NET_WIFI is not set
+
+CONFIG_SOULCLOUD_BROKER_URI="ws://10.0.2.2:1883/mqtt"
+CONFIG_SOULCLOUD_API_BASE_URL="http://10.0.2.2:8080"
+
+# QEMU has no real NVS persistence unless a flash image is reused; keep the
+# device config baked in (Kconfig defaults) for the first boot.
+CONFIG_SOULCLOUD_DEVICE_UID="qemu-demo-0001"
+CONFIG_SOULCLOUD_DEVICE_PASSWORD="qemu-demo-secret"
