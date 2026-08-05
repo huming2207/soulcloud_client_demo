@@ -1,0 +1,6 @@
+[submodule "components/soulcloud"]
+	path = components/soulcloud
+	url = https://github.com/huming2207/esp_soulcloud_client
+[submodule "components/on9log"]
+	path = components/on9log
+	url = https://github.com/huming2207/on9log
