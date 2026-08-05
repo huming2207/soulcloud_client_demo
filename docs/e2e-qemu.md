@@ -76,7 +76,6 @@ python3 -m venv /tmp/e2e-venv
 Options/env: `SOULCLOUD_BACKEND_DIR`, `QEMU_BIN`, `E2E_UID`,
 `E2E_REUSE_BACKEND=1` (reuse an externally managed api/broker).
 
-A bash-only fallback runner is still available: `scripts/run-e2e.sh`
 (provisions, builds v1/v2, boots QEMU, asserts everything in one go;
 `--skip-ota`, `--skip-resilience`, `--keep-running`).
 
@@ -126,11 +125,9 @@ Known quirks (all handled by the script/workflow):
 - [x] demo_app: Ethernet (OpenETH) network path + Kconfig switch
 - [x] backend `.noload` matcher fix (soulcloud.js 4352fa2, docs/logging.md)
 - [x] device provisioning helper: `scripts/provision-device.sh`
-- [x] E2E runner script (start backend → qemu → assert):
-      `scripts/run-e2e.sh` — local run green (2026-08-05)
 - [x] pytest-embedded suite (`tests/e2e/`) with per-flow test cases:
-      connect/stat, command, log decode, OTA, resilience — local run
-      green (2026-08-06)
-- [x] CI workflow: `.github/workflows/e2e-qemu.yml` — green on GitHub
-      Actions (2026-08-05) via run-e2e.sh; switched to the pytest suite
-      (needs soulcloud.js ≥ ccc7bce).
+      connect/stat, command, log decode, OTA, resilience — local and
+      GitHub Actions green (2026-08-06); a bash-only prototype runner
+      was removed once the suite landed
+- [x] CI workflow: `.github/workflows/e2e-qemu.yml` (needs soulcloud.js
+      ≥ ccc7bce).

@@ -57,8 +57,8 @@ bun run dev                                   # api :8080 + broker :1883/mqtt
 
 Health check: `curl http://127.0.0.1:8080/health/ready`.
 
-> Note: the local repo may be ahead of `origin` — run the E2E suites with
-> `bash scripts/run-e2e.sh` before relying on it.
+> Note: the local repo may be ahead of `origin` — run the E2E suite with
+> `pytest tests/e2e` (see docs/e2e-qemu.md) before relying on it.
 
 ## Provision a device
 

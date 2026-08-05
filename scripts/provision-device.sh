@@ -77,7 +77,7 @@ echo "  CONFIG_SOULCLOUD_DEVICE_UID=\"$MQTT_USER\""
 echo "  CONFIG_SOULCLOUD_DEVICE_PASSWORD=\"$MQTT_PASS\""
 echo "======================================================================"
 
-# Machine-readable block for scripts (run-e2e.sh). Field names are stable.
+# Machine-readable block for tools (pytest tests/e2e). Field names are stable.
 echo "--- e2e ---"
 echo "device_uid=$MQTT_USER"
 echo "device_password=$MQTT_PASS"
