@@ -1,0 +1,11 @@
+menu "Soulcloud demo"
+
+    config SOULCLOUD_DEMO_WIFI_SSID
+        string "WiFi SSID"
+        default "myssid"
+
+    config SOULCLOUD_DEMO_WIFI_PASSWORD
+        string "WiFi password"
+        default ""
+
+endmenu

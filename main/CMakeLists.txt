@@ -1,4 +1,3 @@
-idf_component_register(SRCS "hello_world_main.c"
-                       REQUIRES soulcloud
-                       PRIV_REQUIRES spi_flash
-                       INCLUDE_DIRS "")
+idf_component_register(SRCS "main.cpp" "commands.cpp"
+                       REQUIRES soulcloud on9log
+                       PRIV_REQUIRES nvs_flash esp_wifi esp_netif esp_event esp_timer esp_app_format log)
