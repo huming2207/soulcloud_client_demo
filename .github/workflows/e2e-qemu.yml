@@ -4,9 +4,10 @@ name: e2e-qemu
 # connect/auth, commands, stat.fw==buildId, on9log log decode, OTA,
 # broker-restart resilience. Runs scripts/run-e2e.sh in a clean runner.
 #
-# The backend is cloned from github.com/huming2207/soulcloudjs and MUST
-# include the .flash.rodata tag-extraction fix (>= ccc7bce) — the workflow
-# fails fast with a clear message if it is missing.
+# The backend is cloned from github.com/huming2207/soulcloudjs (private
+# repo). Set a repo secret SOULCLOUDJS_PAT with a PAT that can read it, or
+# make the repo public. The clone MUST include the .flash.rodata
+# tag-extraction fix (>= ccc7bce) — the step fails fast otherwise.
 
 on:
   push:
@@ -27,21 +28,26 @@ jobs:
         with:
           bun-version: 1.3.13
 
-      # Installs ESP-IDF 6.0.2 + the xtensa-esp32s3 toolchain on the runner
-      # and exports IDF_PATH for the subsequent steps.
-      - uses: espressif/idf-action@v1
+      # Installs ESP-IDF 6.0.2 on the runner (idf.py and the toolchains go
+      # on PATH; IDF_PATH points at the installation).
+      - uses: espressif/install-esp-idf-action@v1
         with:
-          idf_version: v6.0.2
-          target: esp32s3
+          version: v6.0.2
 
       - name: Install QEMU (Espressif fork)
         run: |
-          source "$IDF_PATH/export.sh"
           python "$IDF_PATH/tools/idf_tools.py" install qemu-xtensa
 
       - name: Clone backend
+        env:
+          SOULCLOUDJS_PAT: ${{ secrets.SOULCLOUDJS_PAT }}
         run: |
-          git clone --depth 1 https://github.com/huming2207/soulcloudjs "$RUNNER_TEMP/soulcloudjs"
+          if [ -n "$SOULCLOUDJS_PAT" ]; then
+            git clone --depth 1 "https://${SOULCLOUDJS_PAT}@github.com/huming2207/soulcloudjs" "$RUNNER_TEMP/soulcloudjs"
+          else
+            echo "::warning::no SOULCLOUDJS_PAT secret; trying public clone"
+            git clone --depth 1 https://github.com/huming2207/soulcloudjs "$RUNNER_TEMP/soulcloudjs"
+          fi
           grep -q 'flash\.rodata' "$RUNNER_TEMP/soulcloudjs/packages/core/src/logging/artifact.ts" \
             || { echo "::error::soulcloudjs is missing the .flash.rodata tag-extraction fix (need >= ccc7bce); push it first"; exit 1; }
 
@@ -58,7 +64,7 @@ jobs:
           DATABASE_URL: "postgres://soulcloud:soulcloud@127.0.0.1:5432/soulcloud"
           E2E_VERBOSE: "1"
         run: |
-          source "$IDF_PATH/export.sh"
+          [ -n "${IDF_PATH:-}" ] && source "$IDF_PATH/export.sh" || true
           ./scripts/run-e2e.sh
 
       - name: Upload E2E artifacts (on failure)

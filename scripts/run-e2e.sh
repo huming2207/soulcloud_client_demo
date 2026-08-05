@@ -110,7 +110,14 @@ grep -q 'flash\.rodata' "$BACKEND_DIR/packages/core/src/logging/artifact.ts" \
     || die "backend missing the .flash.rodata tag-extraction fix (soulcloudjs >= ccc7bce)"
 
 if [ -z "${QEMU_BIN:-}" ]; then
-    QEMU_BIN="$(find "$HOME/.espressif/tools/qemu-xtensa" -name qemu-system-xtensa -type f 2>/dev/null | head -1 || true)"
+    # local installs land in ~/.espressif; the CI action installs under
+    # /opt/esp (IDF_TOOLS_PATH)
+    for dir in "$HOME/.espressif/tools/qemu-xtensa" \
+               "${IDF_TOOLS_PATH:-}/tools/qemu-xtensa" \
+               "/opt/esp/tools/qemu-xtensa"; do
+        QEMU_BIN="$(find "$dir" -name qemu-system-xtensa -type f 2>/dev/null | head -1 || true)"
+        [ -n "$QEMU_BIN" ] && break
+    done
 fi
 [ -n "$QEMU_BIN" ] || die "qemu-system-xtensa not found; install via: python \$IDF_PATH/tools/idf_tools.py install qemu-xtensa"
 log "QEMU: $QEMU_BIN"
