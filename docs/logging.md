@@ -38,7 +38,7 @@ on9log macros place format strings in `.noload_keep_in_elf.<N>` input
 sections (`__attribute__((section(...)))`); the device only ever transmits
 the *addresses* (ELF VMAs), never the strings.
 
-## ⚠️ TODO (blocked on backend change — remind the user)
+## ✅ Resolved (2026-08-05, soulcloud.js 4352fa2)
 
 **Problem:** ESP-IDF 6.0's linker script already supports on9log sections
 (`sections.ld.in` has `.noload 0 (INFO)` with
@@ -48,22 +48,15 @@ sections into an output section named `.noload`**.
 
 - Verified: `readelf -S hello_world.elf` shows `[.noload] PROGBITS addr 0,
   size 0x45` containing the demo format strings.
-- The backend matcher only accepts `sec.name.startsWith(".noload_keep_in_elf")`,
-  so **`POST /v1/firmware-artifacts` extracts no formats from IDF 6.0
-  builds** → on9log log decoding will not resolve format strings.
+- The backend matcher only accepted `sec.name.startsWith(".noload_keep_in_elf")`,
+  so `POST /v1/firmware-artifacts` extracted no formats from IDF 6.0
+  builds → on9log log decoding could not resolve format strings.
 
-**Chosen fix (user-approved direction):** relax the backend matcher in
-`packages/core/src/logging/artifact.ts`:
-
-```js
-// current:
-if (sec.name.startsWith(".noload_keep_in_elf")) { ... }
-// change to also accept the IDF 6.0 merged output section:
-if (sec.name.startsWith(".noload_keep_in_elf") || sec.name === ".noload") { ... }
-```
-
-plus a parser test for a non-ALLOC `.noload` section. The device side needs
-no changes (addresses are identical; the section is kept by `KEEP`).
+**Fix (landed):** `packages/core/src/logging/artifact.ts` now also accepts
+`sec.name === ".noload"` as a no-load string section; `buildNoloadElf()`
+gained an optional section-name parameter; `logging.test.ts` covers the
+merged `.noload` layout. Device side needed no changes (addresses are
+identical; the section is kept by `KEEP`).
 
 **Why not fix on the device side:** a custom `-T` linker script fragment
 cannot pre-empt the built-in `.noload` output section (later scripts cannot
