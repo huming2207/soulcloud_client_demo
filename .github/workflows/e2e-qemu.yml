@@ -4,10 +4,10 @@ name: e2e-qemu
 # connect/auth, commands, stat.fw==buildId, on9log log decode, OTA,
 # broker-restart resilience. Runs scripts/run-e2e.sh in a clean runner.
 #
-# The backend is cloned from github.com/huming2207/soulcloudjs (private
-# repo). Set a repo secret SOULCLOUDJS_PAT with a PAT that can read it, or
-# make the repo public. The clone MUST include the .flash.rodata
-# tag-extraction fix (>= ccc7bce) — the step fails fast otherwise.
+# The backend is cloned from github.com/huming2207/soulcloud.js (public
+# repo; a SOULCLOUDJS_PAT secret is still honoured if it ever goes
+# private). The clone MUST include the .flash.rodata tag-extraction fix
+# (>= ccc7bce) — the step fails fast otherwise.
 
 on:
   push:
@@ -43,10 +43,10 @@ jobs:
           SOULCLOUDJS_PAT: ${{ secrets.SOULCLOUDJS_PAT }}
         run: |
           if [ -n "$SOULCLOUDJS_PAT" ]; then
-            git clone --depth 1 "https://${SOULCLOUDJS_PAT}@github.com/huming2207/soulcloudjs" "$RUNNER_TEMP/soulcloudjs"
+            git clone --depth 1 "https://${SOULCLOUDJS_PAT}@github.com/huming2207/soulcloud.js" "$RUNNER_TEMP/soulcloudjs"
           else
             echo "::warning::no SOULCLOUDJS_PAT secret; trying public clone"
-            git clone --depth 1 https://github.com/huming2207/soulcloudjs "$RUNNER_TEMP/soulcloudjs"
+            git clone --depth 1 https://github.com/huming2207/soulcloud.js "$RUNNER_TEMP/soulcloudjs"
           fi
           grep -q 'flash\.rodata' "$RUNNER_TEMP/soulcloudjs/packages/core/src/logging/artifact.ts" \
             || { echo "::error::soulcloudjs is missing the .flash.rodata tag-extraction fix (need >= ccc7bce); push it first"; exit 1; }
