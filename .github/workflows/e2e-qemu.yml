@@ -60,11 +60,10 @@ jobs:
 
       - name: Run E2E
         env:
-          SOULCLOUD_BACKEND_DIR: "$RUNNER_TEMP/soulcloudjs"
+          SOULCLOUD_BACKEND_DIR: ${{ runner.temp }}/soulcloudjs
           DATABASE_URL: "postgres://soulcloud:soulcloud@127.0.0.1:5432/soulcloud"
           E2E_VERBOSE: "1"
         run: |
-          [ -n "${IDF_PATH:-}" ] && source "$IDF_PATH/export.sh" || true
           ./scripts/run-e2e.sh
 
       - name: Upload E2E artifacts (on failure)

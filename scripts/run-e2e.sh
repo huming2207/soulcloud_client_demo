@@ -125,8 +125,16 @@ log "QEMU: $QEMU_BIN"
 if [ -z "${IDF_PATH:-}" ]; then
     IDF_PATH="$HOME/esp/esp-idf"
 fi
-# shellcheck disable=SC1090
-source "$IDF_PATH/export.sh" >/dev/null 2>&1 || die "cannot source $IDF_PATH/export.sh"
+# CI runners (espressif/install-esp-idf-action) already have idf.py on
+# PATH and their export.sh may fail on optional tools (esp-rom-elfs);
+# only source when idf.py is missing (local dev shells).
+if ! command -v idf.py >/dev/null 2>&1; then
+    # shellcheck disable=SC1090
+    source "$IDF_PATH/export.sh" >/dev/null 2>&1 \
+        || log "warn: cannot source $IDF_PATH/export.sh; relying on PATH"
+fi
+command -v idf.py >/dev/null || die "idf.py not found (source \$IDF_PATH/export.sh first)"
+command -v esptool.py >/dev/null || die "esptool.py not found (source \$IDF_PATH/export.sh first)"
 
 git -C "$ROOT_DIR" diff --quiet -- main/main.cpp \
     || die "main/main.cpp has uncommitted changes; commit or stash them (the OTA step patches and restores it)"
@@ -189,7 +197,7 @@ idf.py -B "$E2E_DIR/build" -DSDKCONFIG="$E2E_DIR/sdkconfig" \
 cp "$E2E_DIR/build/hello_world.bin" "$E2E_DIR/v1.bin"
 cp "$E2E_DIR/build/hello_world.elf" "$E2E_DIR/v1.elf"
 V1_SHA="$(sha256sum "$E2E_DIR/v1.elf" | cut -d' ' -f1)"
-(cd "$E2E_DIR/build" && python -m esptool --chip esp32s3 merge_bin \
+(cd "$E2E_DIR/build" && esptool.py --chip esp32s3 merge_bin \
     -o "$E2E_DIR/flash_image.bin" --pad-to-size 8MB @flash_args >/dev/null)
 log "v1 elf sha256: ${V1_SHA:0:16}..."
 
