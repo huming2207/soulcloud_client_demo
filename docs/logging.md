@@ -7,16 +7,43 @@ on9log core (components/on9log, submodule @ 8c11225)
   ├─ encodes packets (18-byte header + typed args, .noload string addresses)
   ├─ filters (level / tag), ISR ringbuffer path
   └─ dispatch to registered sinks (start / payload / end callbacks)
-       ├─ on9log_esp_vfs (UART + SLIP)   — local debugging
-       └─ soulcloud log_sender           — MQTT `log` topic, QoS 0, throttled
+       ├─ on9log_esp_vfs (UART console + SLIP)  — local debugging / host decoder
+       └─ soulcloud log_sender                  — MQTT `log` topic, QoS 0, throttled
 ```
 
-- The component installs `log_sender` (see `components/soulcloud/src/logs.cpp`)
-  as an on9log sink. It reassembles each packet under a static mutex into a
-  4 KiB static buffer and publishes it to
-  `soulcloud/v1/devices/{uid}/log` at QoS 0, throttled to
-  `SOULCLOUD_LOG_RATE_PER_S` (default 10 msg/s; the server guard allows
-  20/s). Packets over the limit are dropped silently.
+Both sinks run in parallel in every build: the VFS sink emits the
+SLIP-encoded stream on the console UART (decode it with the on9log host
+tool, github.com/huming2207/on9log_host), and `log_sender` forwards the
+same packets to the `log` topic.
+
+- `log_sender` (see `components/soulcloud/src/logs.cpp`) is a
+  **producer/consumer pair over a FreeRTOS ring buffer**
+  (`SOULCLOUD_LOG_RB_SIZE`, default 16 KiB, PSRAM):
+  - producer: the on9log sink callbacks (running on the log source's
+    task) reassemble each packet under a static mutex and enqueue it with
+    a zero-tick wait — a full ring buffer drops the packet (logs are
+    lossy telemetry). No MQTT work happens on the producer side.
+  - consumer: the soulcloud core task polls the ring buffer with
+    zero-tick receives on a 1-tick interval (empty == NULL return, no
+    signalling needed) and publishes to
+    `soulcloud/v1/devices/{uid}/log` at QoS 0, throttled to
+    `SOULCLOUD_LOG_RATE_PER_S` (default 10 msg/s; the server guard allows
+    20/s). Packets over the limit are dropped silently.
+- One MQTT `log` message == one complete on9log packet (no SLIP on the MQTT
+  path). `payload_len` must equal the actual payload length (backend
+  enforces `packet.length == 18 + payload_len`).
+- on9log core emits its own DROPPED packets (ISR ringbuffer overflow) through
+  the same sink; the MQTT-side throttle drops are transport policy and are
+  not reported as DROPPED packets.
+
+### QEMU / E2E: console decoded by the host tool
+
+In the QEMU harness the emulated console carries ESP_LOG text interleaved
+with the SLIP stream. `scripts/qemu-on9log-wrap.sh` pipes QEMU's stdout
+through `on9log --log-stdin --elf app.elf` (the on9log host decoder):
+SLIP frames are decoded to readable log lines against the firmware ELF
+and non-frame bytes (ESP_LOG text) pass through verbatim, so the harness
+matches plain text only.
 - One MQTT `log` message == one complete on9log packet (no SLIP on the MQTT
   path). `payload_len` must equal the actual payload length (backend
   enforces `packet.length == 18 + payload_len`).

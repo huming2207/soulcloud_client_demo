@@ -73,8 +73,14 @@ python3 -m venv /tmp/e2e-venv
 /tmp/e2e-venv/bin/pytest tests/e2e -v
 ```
 
-Options/env: `SOULCLOUD_BACKEND_DIR`, `QEMU_BIN`, `E2E_UID`,
-`E2E_REUSE_BACKEND=1` (reuse an externally managed api/broker).
+Options/env: `SOULCLOUD_BACKEND_DIR`, `QEMU_BIN`, `ON9LOG_BIN`,
+`ON9LOG_ELF`, `E2E_UID`, `E2E_REUSE_BACKEND=1` (reuse an externally
+managed api/broker).
+
+The device console carries both ESP_LOG text and the on9log SLIP stream;
+`scripts/qemu-on9log-wrap.sh` pipes QEMU stdout through the on9log host
+decoder (`on9log --log-stdin --elf app.elf`), so the harness reads plain
+text (SLIP frames decoded, ESP_LOG passed through).
 
 (provisions, builds v1/v2, boots QEMU, asserts everything in one go;
 `--skip-ota`, `--skip-resilience`, `--keep-running`).

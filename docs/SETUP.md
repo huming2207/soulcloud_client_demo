@@ -120,6 +120,11 @@ already baked into `sdkconfig.defaults.eth`.
 idf.py -p /dev/ttyUSB0 flash monitor     # adjust the port
 ```
 
+The console carries ESP_LOG text plus the on9log SLIP stream (both sinks
+are always on). For readable on9log packets, point the host decoder at
+the serial port: `on9log -p /dev/ttyUSB0 -b 115200 --elf build/hello_world.elf`
+(see github.com/huming2207/on9log_host).
+
 ## Troubleshooting
 
 - **Build fails on missing `external/mpack`**: run
