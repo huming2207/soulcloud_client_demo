@@ -282,7 +282,8 @@ esp_err_t soulcloud_init(const soulcloud_config_t *cfg);        // NVS, esp-mqtt
 esp_err_t soulcloud_start(void);                                // esp_mqtt_client_start (auto-reconnect)
 esp_err_t soulcloud_stop(void);
 esp_err_t soulcloud_register_command(const char *name,
-        esp_err_t (*handler)(const soulcloud_command_t *cmd, soulcloud_result_t *out));
+        esp_err_t (*handler)(const soulcloud_command_t *cmd, soulcloud_result_t *out,
+                             void *ctx), void *ctx);  // ctx passed to every dispatch
 bool     soulcloud_is_connected(void);
 void     soulcloud_set_connection_cb(void (*cb)(bool connected, void *ctx));
 esp_err_t soulcloud_report_stat(void);                          // force immediate stat

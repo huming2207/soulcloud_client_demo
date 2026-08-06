@@ -8,8 +8,8 @@
 #include <cstring>
 
 #include <esp_app_desc.h>
+#include <esp_check.h>
 #include <esp_log.h>
-#include <esp_system.h>
 #include <esp_system.h>
 #include <esp_timer.h>
 #include <esp_wifi.h>
@@ -21,12 +21,10 @@ using namespace soulcloud_demo;
 
 volatile bool soulcloud_demo::demo_commands::s_reboot_pending = false;
 
-// static storage for handler payloads (handlers run synchronously
-// on the MQTT event task, so this is single-threaded)
-soulcloud::cmd_arg s_args[6];
-char s_uid[128];
-char s_fw[65];
-char s_rst[16];
+// Per-instance state handed to every handler as its ctx (see commands.hpp).
+// Handlers run synchronously on the MQTT event task, so the buffers are
+// single-threaded.
+demo_state soulcloud_demo::demo_commands::s_state;
 
 const char *reset_reason_str(esp_reset_reason_t r)
 {
@@ -83,23 +81,34 @@ bool soulcloud_demo::demo_commands::reboot_pending()
 
 esp_err_t soulcloud_demo::demo_commands::register_all(soulcloud::soulcloud_client &client)
 {
-    ESP_ERROR_CHECK(client.register_command("getInfo", get_info));
-    ESP_ERROR_CHECK(client.register_command("reboot", reboot));
-    ESP_ERROR_CHECK(client.register_command("setLogging", set_logging));
-    ESP_ERROR_CHECK(client.register_command("setConfig", set_config));
-    ESP_ERROR_CHECK(client.register_command("echo", echo));
+    // Register with the shared state as ctx. Errors are returned (not
+    // asserted) so app_main decides what to do.
+    ESP_RETURN_ON_ERROR(client.register_command("getInfo", get_info, &s_state), TAG,
+                        "register getInfo");
+    ESP_RETURN_ON_ERROR(client.register_command("reboot", reboot, &s_state), TAG,
+                        "register reboot");
+    ESP_RETURN_ON_ERROR(client.register_command("setLogging", set_logging, &s_state), TAG,
+                        "register setLogging");
+    ESP_RETURN_ON_ERROR(client.register_command("setConfig", set_config, &s_state), TAG,
+                        "register setConfig");
+    ESP_RETURN_ON_ERROR(client.register_command("echo", echo, &s_state), TAG,
+                        "register echo");
     return ESP_OK;
 }
 
-esp_err_t soulcloud_demo::demo_commands::get_info(const soulcloud::command_exec *cmd, soulcloud::command_result *out)
+esp_err_t soulcloud_demo::demo_commands::get_info(const soulcloud::command_exec *cmd, soulcloud::command_result *out, void *ctx)
 {
     (void)cmd;
+    demo_state *st = static_cast<demo_state *>(ctx);
+    if (st == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
 
     soulcloud::config cfg;
     soulcloud::config_store::instance().load(&cfg);
-    snprintf(s_uid, sizeof(s_uid), "%s", cfg.device_uid);
-    esp_app_get_elf_sha256(s_fw, sizeof(s_fw));
-    snprintf(s_rst, sizeof(s_rst), "%s", reset_reason_str(esp_reset_reason()));
+    snprintf(st->uid, sizeof(st->uid), "%s", cfg.device_uid);
+    esp_app_get_elf_sha256(st->fw, sizeof(st->fw));
+    snprintf(st->rst, sizeof(st->rst), "%s", reset_reason_str(esp_reset_reason()));
 
     wifi_ap_record_t ap = {};
     int32_t rssi = 0;
@@ -108,47 +117,49 @@ esp_err_t soulcloud_demo::demo_commands::get_info(const soulcloud::command_exec 
     }
 
     uint32_t i = 0;
-    s_args[i].key = "device_uid";
-    s_args[i].key_len = 10;
-    s_args[i].value = make_str(s_uid);
+    st->args[i].key = "device_uid";
+    st->args[i].key_len = 10;
+    st->args[i].value = make_str(st->uid);
     i++;
-    s_args[i].key = "fw_sha256";
-    s_args[i].key_len = 9;
-    s_args[i].value = make_str(s_fw);
+    st->args[i].key = "fw_sha256";
+    st->args[i].key_len = 9;
+    st->args[i].value = make_str(st->fw);
     i++;
-    s_args[i].key = "uptime_s";
-    s_args[i].key_len = 8;
-    s_args[i].value = make_int((int64_t)(esp_timer_get_time() / 1000000));
+    st->args[i].key = "uptime_s";
+    st->args[i].key_len = 8;
+    st->args[i].value = make_int((int64_t)(esp_timer_get_time() / 1000000));
     i++;
-    s_args[i].key = "reset_reason";
-    s_args[i].key_len = 12;
-    s_args[i].value = make_str(s_rst);
+    st->args[i].key = "reset_reason";
+    st->args[i].key_len = 12;
+    st->args[i].value = make_str(st->rst);
     i++;
-    s_args[i].key = "wifi_rssi";
-    s_args[i].key_len = 9;
-    s_args[i].value = make_int(rssi);
+    st->args[i].key = "wifi_rssi";
+    st->args[i].key_len = 9;
+    st->args[i].value = make_int(rssi);
     i++;
-    s_args[i].key = "heap_free";
-    s_args[i].key_len = 9;
-    s_args[i].value = make_int((int64_t)esp_get_free_heap_size());
+    st->args[i].key = "heap_free";
+    st->args[i].key_len = 9;
+    st->args[i].value = make_int((int64_t)esp_get_free_heap_size());
     i++;
 
     out->code = 0;
-    out->args = s_args;
+    out->args = st->args;
     out->arg_count = i;
     return ESP_OK;
 }
 
-esp_err_t soulcloud_demo::demo_commands::reboot(const soulcloud::command_exec *cmd, soulcloud::command_result *out)
+esp_err_t soulcloud_demo::demo_commands::reboot(const soulcloud::command_exec *cmd, soulcloud::command_result *out, void *ctx)
 {
     (void)cmd;
+    (void)ctx;
     out->code = 0;
     s_reboot_pending = true;  // main loop performs the actual restart
     return ESP_OK;
 }
 
-esp_err_t soulcloud_demo::demo_commands::set_logging(const soulcloud::command_exec *cmd, soulcloud::command_result *out)
+esp_err_t soulcloud_demo::demo_commands::set_logging(const soulcloud::command_exec *cmd, soulcloud::command_result *out, void *ctx)
 {
+    (void)ctx;
     // args: [{enabled: bool}]
     bool enabled = false;
     for (uint32_t i = 0; i < cmd->arg_count; ++i) {
@@ -164,8 +175,9 @@ esp_err_t soulcloud_demo::demo_commands::set_logging(const soulcloud::command_ex
     return ESP_OK;
 }
 
-esp_err_t soulcloud_demo::demo_commands::set_config(const soulcloud::command_exec *cmd, soulcloud::command_result *out)
+esp_err_t soulcloud_demo::demo_commands::set_config(const soulcloud::command_exec *cmd, soulcloud::command_result *out, void *ctx)
 {
+    (void)ctx;
     // args: [{key: str}, {value: str}]
     const char *key = nullptr;
     uint32_t key_len = 0;
@@ -201,8 +213,9 @@ esp_err_t soulcloud_demo::demo_commands::set_config(const soulcloud::command_exe
     return ESP_OK;
 }
 
-esp_err_t soulcloud_demo::demo_commands::echo(const soulcloud::command_exec *cmd, soulcloud::command_result *out)
+esp_err_t soulcloud_demo::demo_commands::echo(const soulcloud::command_exec *cmd, soulcloud::command_result *out, void *ctx)
 {
+    (void)ctx;
     out->code = 0;
     out->args = cmd->args;  // echo the received args verbatim
     out->arg_count = cmd->arg_count;
