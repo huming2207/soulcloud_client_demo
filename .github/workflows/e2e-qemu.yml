@@ -46,6 +46,23 @@ jobs:
         with:
           bun-version: 1.3.13
 
+      # Caches the EIM install (IDF source + toolchains + qemu-xtensa) at
+      # /tmp/esp and ~/.espressif. EIM is idempotent (idf-im-ui
+      # src-tauri/src/lib/idf_tools.rs: tools already installed with the
+      # correct version are skipped; git clones skip the fetch when the
+      # commit exists), so a cache hit turns the ~3-5 min install step
+      # into a few seconds of checks. Key is pinned to the IDF version:
+      # a bump starts a fresh install and the old entry expires via the
+      # 7-day LRU. v4 only saves on a complete key miss, so passing
+      # pushes don't re-upload.
+      - name: Cache ESP-IDF install (EIM)
+        uses: actions/cache@v4
+        with:
+          path: |
+            /tmp/esp
+            ~/.espressif
+          key: esp-idf-eim-v6.0.2-${{ runner.os }}
+
       # Installs ESP-IDF 6.0.2 on the runner (idf.py and the toolchains go
       # on PATH; IDF_PATH points at the installation).
       - uses: espressif/install-esp-idf-action@v1
