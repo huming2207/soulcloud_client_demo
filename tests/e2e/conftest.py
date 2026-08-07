@@ -293,19 +293,33 @@ def _sha256(path: Path) -> str:
 # ------------------------------------------------------------------ #
 
 @pytest.fixture
-def qemu_prog_path() -> str | None:
-    """Auto-detect the Espressif QEMU binary (local ~/.espressif and CI
-    /opt/esp layouts)."""
+def qemu_prog_path(device: Device) -> str | None:
+    """Returns the QEMU wrapper: it pipes the emulated console through the
+    on9log host decoder so the harness reads plain text (SLIP frames are
+    decoded against the firmware ELF, ESP_LOG text passes through)."""
     env = os.environ.get("QEMU_BIN")
-    if env:
-        return env
-    for base in (Path.home() / ".espressif" / "tools" / "qemu-xtensa",
-                 Path(os.environ.get("IDF_TOOLS_PATH", "/opt/esp")) / "tools" / "qemu-xtensa"):
-        if base.is_dir():
-            for p in base.rglob("qemu-system-xtensa"):
-                if p.is_file():
-                    return str(p)
-    raise RuntimeError("qemu-system-xtensa not found; install via idf_tools.py install qemu-xtensa")
+    if not env:
+        for base in (Path.home() / ".espressif" / "tools" / "qemu-xtensa",
+                     Path(os.environ.get("IDF_TOOLS_PATH", "/opt/esp")) / "tools" / "qemu-xtensa"):
+            if base.is_dir():
+                found = [p for p in base.rglob("qemu-system-xtensa") if p.is_file()]
+                if found:
+                    env = str(found[0])
+                    break
+    if not env:
+        raise RuntimeError("qemu-system-xtensa not found; install via idf_tools.py install qemu-xtensa")
+    os.environ["QEMU_BIN"] = env
+
+    on9log = os.environ.get("ON9LOG_BIN")
+    if not on9log:
+        import shutil
+        on9log = shutil.which("on9log") or str(
+            Path.home() / "Projects" / "on9log_host" / "target" / "release" / "on9log")
+    if not Path(on9log).is_file():
+        raise RuntimeError(f"on9log host decoder not found: {on9log} (build on9log_host)")
+    os.environ["ON9LOG_BIN"] = on9log
+    os.environ["ON9LOG_ELF"] = str(device.elf)
+    return str(REPO_ROOT / "scripts" / "qemu-on9log-wrap.sh")
 
 
 # ------------------------------------------------------------------ #

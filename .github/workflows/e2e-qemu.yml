@@ -73,9 +73,20 @@ jobs:
         run: |
           cd "$RUNNER_TEMP/soulcloud.js"
           bun install
+          # compose interpolates ${JWT_SECRET:?} for the api/broker
+          # services even when only postgres is started
+          export JWT_SECRET="$(openssl rand -base64 48)"
           docker compose up -d --wait postgres
           DATABASE_URL="postgres://soulcloud:soulcloud@127.0.0.1:5432/soulcloud" bun run db:generate
           DATABASE_URL="postgres://soulcloud:soulcloud@127.0.0.1:5432/soulcloud" bun run db:deploy
+
+      - name: Build on9log host decoder
+        run: |
+          git clone --depth 1 https://github.com/huming2207/on9log_host "$RUNNER_TEMP/on9log_host"
+          cd "$RUNNER_TEMP/on9log_host/on9log-cli/web"
+          bun install >/dev/null && bun run build >/dev/null
+          cd "$RUNNER_TEMP/on9log_host"
+          cargo build --release --bin on9log
 
       - name: Install E2E test deps
         run: |
@@ -86,6 +97,7 @@ jobs:
         env:
           SOULCLOUD_BACKEND_DIR: ${{ runner.temp }}/soulcloud.js
           DATABASE_URL: "postgres://soulcloud:soulcloud@127.0.0.1:5432/soulcloud"
+          ON9LOG_BIN: "$RUNNER_TEMP/on9log_host/target/release/on9log"
         run: |
           /tmp/e2e-venv/bin/pytest tests/e2e -v
 

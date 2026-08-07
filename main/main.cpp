@@ -103,17 +103,19 @@ esp_err_t demo_app::init()
     // NVS (config + credentials storage)
     ESP_ERROR_CHECK(nvs_flash_init());
 
-    // on9log: core + UART/VFS sink for local debugging; the MQTT sink
-    // (component) is layered on top later. The UART/VFS sink is skipped in
-    // the Ethernet/QEMU build: there is no serial host decoder there, and
-    // the raw SLIP stream would drown the console logs on the emulated UART.
+    // on9log: core + serial sink for local debugging; the MQTT sink
+    // (component) is layered on top later. Both sinks run in parallel:
+    // the serial sink emits the SLIP-encoded stream and the component's
+    // sink forwards the same packets to the `log` topic. On hardware the
+    // stream goes to the console UART (decode with the on9log host tool,
+    // github.com/huming2207/on9log_host); in the QEMU build it goes to
+    // UART1 so the emulated console stays clean for ESP_LOG text (the
+    // E2E harness matches it).
     if (on9log_init() != ON9LOG_OK) {
         ESP_LOGE(TAG, "on9log_init failed");
         return ESP_FAIL;
     }
-#if !CONFIG_SOULCLOUD_DEMO_NET_ETH
     ESP_ERROR_CHECK(on9log_esp_vfs_init());
-#endif
 
     // network stack
     ESP_ERROR_CHECK(esp_netif_init());
