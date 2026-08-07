@@ -139,6 +139,14 @@ def test_ota(dut: Dut, api, device) -> None:
     shutil.copyfile(BUILD_DIR / "hello_world.bin", v2_bin)
     shutil.copyfile(BUILD_DIR / "hello_world.elf", v2_elf)
 
+    # The host-side build competes for CPU with QEMU (TCG), which has been
+    # observed to trigger a ws reconnect storm on slow CI runners; the MQTT
+    # session may drop and come back several times. Deploying while the
+    # device is offline loses the notice (no persistent QoS1 session), so
+    # wait for a confirmed reconnect before issuing the deploy.
+    dut.expect(r"connected; subscribed to cmd/exec and ota", timeout=180)
+    time.sleep(5)  # let a fresh connection settle past the reconnect window
+
     # --- upload release + deploy ---
     rel = api.post("/v1/firmware-releases", form={
         "project_id": device.project_id,
