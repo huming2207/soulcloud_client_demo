@@ -4,7 +4,9 @@
 
 #include "commands.hpp"
 
+#include <cerrno>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 #include <esp_app_desc.h>
@@ -207,9 +209,70 @@ esp_err_t soulcloud_demo::demo_commands::set_config(const soulcloud::command_exe
         memcpy(value_buf, value, value_len);
     }
 
-    const esp_err_t err = soulcloud::config_store::instance().set_string(key_buf, value_buf);
-    ESP_LOGI(TAG, "setConfig %s=%s -> %s", key_buf, value_buf, esp_err_to_name(err));
-    out->code = (err == ESP_OK) ? 0 : -2;
+    using store = soulcloud::config_store;
+
+    // String keys: whitelist + content checks (the component's set_string
+    // writes any NVS key, so unknown keys must be rejected here).
+    const bool is_uid = strcmp(key_buf, store::KEY_UID) == 0;
+    if (is_uid || strcmp(key_buf, store::KEY_PASS) == 0 ||
+        strcmp(key_buf, store::KEY_SERIAL) == 0 ||
+        strcmp(key_buf, store::KEY_BROKER) == 0 ||
+        strcmp(key_buf, store::KEY_API) == 0) {
+        // uid must stay topic-safe: no '/', '+', '#' or whitespace
+        if (is_uid) {
+            for (size_t i = 0; i < strlen(value_buf); ++i) {
+                const char c = value_buf[i];
+                if (c == '/' || c == '+' || c == '#' || c == ' ' || c == '\t') {
+                    ESP_LOGW(TAG, "setConfig: uid contains a topic-reserved character");
+                    out->code = -1;
+                    return ESP_OK;
+                }
+            }
+        }
+        const esp_err_t err = store::instance().set_string(key_buf, value_buf);
+        ESP_LOGI(TAG, "setConfig %s=%s -> %s", key_buf, value_buf, esp_err_to_name(err));
+        out->code = (err == ESP_OK) ? 0 : -2;
+        return ESP_OK;
+    }
+
+    // Numeric keys: whitelist + range check (same ranges the component
+    // clamps to on load; a value outside them is rejected, not stored).
+    struct num_limits
+    {
+        const char *key;
+        uint32_t min;
+        uint32_t max;
+    };
+    static constexpr num_limits NUMERIC[] = {
+        {store::KEY_STAT_INT, 1, 86400},
+        {store::KEY_LOG_RATE, 1, 1000},
+        {store::KEY_MQTT_IN, 512, 65536},
+        {store::KEY_MQTT_OUT, 512, 65536},
+        {store::KEY_KA, 5, 3600},
+        {store::KEY_RECONN, 100, 600000},
+        {store::KEY_OTA_MAX, 65536, 67108864},
+        {store::KEY_OTA_TO, 1, 3600},
+    };
+    for (const num_limits &lim : NUMERIC) {
+        if (strcmp(key_buf, lim.key) == 0) {
+            char *end = nullptr;
+            errno = 0;
+            const unsigned long v = strtoul(value_buf, &end, 10);
+            if (errno != 0 || end == value_buf || *end != '\0' || v < lim.min || v > lim.max) {
+                ESP_LOGW(TAG, "setConfig: %s=%s out of range [%lu, %lu]",
+                         key_buf, value_buf, (unsigned long)lim.min, (unsigned long)lim.max);
+                out->code = -1;
+                return ESP_OK;
+            }
+            const esp_err_t err = store::instance().set_u32(key_buf, (uint32_t)v);
+            ESP_LOGI(TAG, "setConfig %s=%lu -> %s", key_buf, v, esp_err_to_name(err));
+            out->code = (err == ESP_OK) ? 0 : -2;
+            return ESP_OK;
+        }
+    }
+
+    ESP_LOGW(TAG, "setConfig: unknown key %s", key_buf);
+    out->code = -1;
     return ESP_OK;
 }
 
