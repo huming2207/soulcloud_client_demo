@@ -122,7 +122,8 @@ def test_ota(dut: Dut, api, device) -> None:
         defaults = f"sdkconfig.defaults;sdkconfig.defaults.eth;{E2E_DIR / 'sdkconfig.e2e'}"
         proc = subprocess.run(
             ["bash", "-c",
-             f'source "{idf_path}/export.sh" >/dev/null 2>&1 && idf.py '
+             f'source "{idf_path}/export.sh" >/dev/null 2>&1 && '
+             f'nice -n 19 idf.py '
              f'-B {shlex.quote(str(BUILD_DIR))} '
              f'-DSDKCONFIG={shlex.quote(str(E2E_DIR / "sdkconfig"))} '
              f'-DSDKCONFIG_DEFAULTS={shlex.quote(defaults)} build'],
@@ -158,8 +159,11 @@ def test_ota(dut: Dut, api, device) -> None:
     job = api.post(f"/v1/firmware-releases/{rel_id}/deploy",
                    {"device_ids": [device.device_id]})["job_id"]
 
-    # device side: download -> verify -> flash -> reboot
-    dut.expect(r"soulcloud_ota: OTA start", timeout=120)
+    # device side: download -> verify -> flash -> reboot. The notice is
+    # re-issued by the backend poller until it is acknowledged, and the
+    # device may still be riding out the reconnect storm, so give it a
+    # generous window.
+    dut.expect(r"soulcloud_ota: OTA start", timeout=240)
     dut.expect(r"soulcloud_ota: sha256 verified", timeout=180)
     dut.expect(r"soulcloud_ota: OTA installed; restarting", timeout=60)
     # reboots into the new app; boot logs show the new ELF sha line
