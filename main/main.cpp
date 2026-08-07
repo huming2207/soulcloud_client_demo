@@ -115,7 +115,18 @@ esp_err_t demo_app::init()
         ESP_LOGE(TAG, "on9log_init failed");
         return ESP_FAIL;
     }
+#if CONFIG_SOULCLOUD_DEMO_NET_ETH
+    // QEMU build: skip the VFS (SLIP) sink on purpose. The SLIP stream
+    // would interleave with ESP_LOG on the emulated console and tear the
+    // text lines the E2E harness matches on (two writers on the same
+    // UART are not line-atomic). Logs still flow over MQTT in this build;
+    // the console stays plain ESP_LOG text.
+#else
+    // Real device: dual output — the SLIP stream on the console (decode
+    // with the on9log host tool) plus the MQTT sink installed by the
+    // component.
     ESP_ERROR_CHECK(on9log_esp_vfs_init());
+#endif
 
     // network stack
     ESP_ERROR_CHECK(esp_netif_init());
