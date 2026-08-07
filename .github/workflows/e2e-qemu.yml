@@ -114,7 +114,7 @@ jobs:
         env:
           SOULCLOUD_BACKEND_DIR: ${{ runner.temp }}/soulcloud.js
           DATABASE_URL: "postgres://soulcloud:soulcloud@127.0.0.1:5432/soulcloud"
-          ON9LOG_BIN: "$RUNNER_TEMP/on9log_host/target/release/on9log"
+          ON9LOG_BIN: ${{ runner.temp }}/on9log_host/target/release/on9log
         run: |
           /tmp/e2e-venv/bin/pytest tests/e2e -v
 
