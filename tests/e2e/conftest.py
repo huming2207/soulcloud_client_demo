@@ -145,9 +145,15 @@ class Device:
 def backend() -> Iterator[Backend]:
     E2E_DIR.mkdir(parents=True, exist_ok=True)
 
-    # postgres via compose (idempotent; kept running between runs)
+    # postgres via compose (idempotent; kept running between runs). The
+    # backend's compose.yaml interpolates ${JWT_SECRET:?} for the
+    # api/broker services even when only postgres is started, and the
+    # subprocess does not inherit the workflow step's export — default it
+    # the same way _spawn() does (the local .env normally provides it).
     subprocess.run(["docker", "compose", "up", "-d", "--wait", "postgres"],
-                   cwd=BACKEND_DIR, check=True)
+                   cwd=BACKEND_DIR, check=True,
+                   env={**os.environ,
+                        "JWT_SECRET": os.environ.get("JWT_SECRET", "e2e-secret-" + "x" * 40)})
     env = {**os.environ, "DATABASE_URL": DATABASE_URL}
     # fresh clones have no prisma client; generate before migrate
     subprocess.run(["bun", "run", "db:generate"], cwd=BACKEND_DIR, env=env,
