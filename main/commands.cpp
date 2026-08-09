@@ -4,6 +4,7 @@
 
 #include "commands.hpp"
 
+#include <cctype>
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
@@ -24,8 +25,8 @@ using namespace soulcloud_demo;
 volatile bool soulcloud_demo::demo_commands::s_reboot_pending = false;
 
 // Per-instance state handed to every handler as its ctx (see commands.hpp).
-// Handlers run synchronously on the MQTT event task, so the buffers are
-// single-threaded.
+// Handlers run synchronously on the dedicated soulcloud core task, so the
+// buffers are single-threaded.
 demo_state soulcloud_demo::demo_commands::s_state;
 
 const char *reset_reason_str(esp_reset_reason_t r)
@@ -220,9 +221,11 @@ esp_err_t soulcloud_demo::demo_commands::set_config(const soulcloud::command_exe
         strcmp(key_buf, store::KEY_API) == 0) {
         // uid must stay topic-safe: no '/', '+', '#' or whitespace
         if (is_uid) {
+            // no '/', '+', '#' or ANY whitespace (the backend rejects all
+            // of it; topics must stay single-level)
             for (size_t i = 0; i < strlen(value_buf); ++i) {
-                const char c = value_buf[i];
-                if (c == '/' || c == '+' || c == '#' || c == ' ' || c == '\t') {
+                const unsigned char c = (unsigned char)value_buf[i];
+                if (c == '/' || c == '+' || c == '#' || isspace(c)) {
                     ESP_LOGW(TAG, "setConfig: uid contains a topic-reserved character");
                     out->code = -1;
                     return ESP_OK;
@@ -245,7 +248,7 @@ esp_err_t soulcloud_demo::demo_commands::set_config(const soulcloud::command_exe
     };
     static constexpr num_limits NUMERIC[] = {
         {store::KEY_STAT_INT, 1, 86400},
-        {store::KEY_LOG_RATE, 1, 1000},
+        {store::KEY_LOG_RATE, 1, 20},  // broker guard: 20/s
         {store::KEY_MQTT_IN, 512, 65536},
         {store::KEY_MQTT_OUT, 512, 65536},
         {store::KEY_KA, 5, 3600},

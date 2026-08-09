@@ -19,8 +19,8 @@ namespace soulcloud_demo
     /**
      * @brief Per-instance state for the demo handlers.
      *
-     * Handlers run synchronously on the MQTT event task, so the payload
-     * buffers below are single-threaded.
+     * Handlers run synchronously on the dedicated soulcloud core task,
+     * so the payload buffers below are single-threaded.
      */
     struct demo_state
     {
