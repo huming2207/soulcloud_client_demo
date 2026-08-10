@@ -26,4 +26,11 @@ fi
 : "${ON9LOG_BIN:?ON9LOG_BIN not set}"
 : "${ON9LOG_ELF:?ON9LOG_ELF not set}"
 
+# Optional CPU affinity for the emulator (QEMU_TASKSET, e.g. "0"): used
+# to reproduce slow-runner conditions locally (pin QEMU to one core and
+# load that core with other work).
+if [ -n "${QEMU_TASKSET:-}" ]; then
+    exec taskset -c "$QEMU_TASKSET" "$QEMU" "$@" 2>&1 | "$ON9LOG_BIN" --log-stdin --elf "$ON9LOG_ELF"
+fi
+
 exec "$QEMU" "$@" 2>&1 | "$ON9LOG_BIN" --log-stdin --elf "$ON9LOG_ELF"
