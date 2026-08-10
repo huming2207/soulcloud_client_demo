@@ -275,6 +275,26 @@ def build_firmware(device: Device) -> Iterator[None]:
     elf = BUILD_DIR / "hello_world.elf"
     shutil.copyfile(elf, device.elf)
     device.elf_sha256 = _sha256(elf)
+
+    # v2 firmware for test_ota, built at session start (before any QEMU
+    # is up): a host-side compile running while the emulator is active
+    # starves the QEMU TCG thread on 2-core CI runners and triggers the
+    # ws reconnect storm (device-side timeouts under a slow emulator).
+    v2_dir = REPO_ROOT / "build" / "e2e-pytest-v2"
+    main_cpp = REPO_ROOT / "main" / "main.cpp"
+    original = main_cpp.read_text()
+    try:
+        main_cpp.write_text(original.replace(
+            'ON9_LOGI(TAG, "tick=', 'ON9_LOGI(TAG, "e2e-v2-tick='))
+        _idf(["-B", str(v2_dir), f"-DSDKCONFIG={E2E_DIR / 'sdkconfig'}",
+              f"-DSDKCONFIG_DEFAULTS={defaults}", "set-target", "esp32s3"],
+             "set-target-v2")
+        _idf(["-B", str(v2_dir), f"-DSDKCONFIG={E2E_DIR / 'sdkconfig'}",
+              f"-DSDKCONFIG_DEFAULTS={defaults}", "build"], "build-v2")
+    finally:
+        main_cpp.write_text(original)  # restore regardless of build outcome
+    shutil.copyfile(v2_dir / "hello_world.bin", E2E_DIR / "v2.bin")
+    shutil.copyfile(v2_dir / "hello_world.elf", E2E_DIR / "v2.elf")
     yield
 
 

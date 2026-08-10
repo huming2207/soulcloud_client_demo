@@ -105,49 +105,17 @@ def test_log_decode(dut: Dut, api, device) -> None:
 
 
 def test_ota(dut: Dut, api, device) -> None:
-    """Build v2 -> upload release (bin+elf) -> deploy -> device downloads,
-    verifies SHA-256, flashes ota_1, reboots, and the job reaches
-    'completed' once the new stat.fw matches the release buildId."""
+    """Upload the session-built v2 release (bin+elf) -> deploy -> device
+    downloads, verifies SHA-256, flashes ota_1, reboots, and the job
+    reaches 'completed' once the new stat.fw matches the release buildId.
+    The v2 firmware is built once at session start (build_firmware), so
+    no host compile runs while QEMU is active (a running compile starves
+    the TCG thread on 2-core CI runners and triggers the ws reconnect
+    storm)."""
     dut.expect(r"connected; subscribed to cmd/exec and ota", timeout=120)
-
-    # --- build v2 (incremental, same private build dir) ---
-    main_cpp = REPO_ROOT / "main" / "main.cpp"
-    original = main_cpp.read_text()
-    import os
-    import shlex
-    import shutil
-    import time
-    idf_path = os.environ.get("IDF_PATH") or str(Path.home() / "esp" / "esp-idf")
-    try:
-        main_cpp.write_text(original.replace(
-            'ON9_LOGI(TAG, "tick=', 'ON9_LOGI(TAG, "e2e-v2-tick='))
-        defaults = f"sdkconfig.defaults;sdkconfig.defaults.eth;{E2E_DIR / 'sdkconfig.e2e'}"
-        proc = subprocess.run(
-            ["bash", "-c",
-             f'source "{idf_path}/export.sh" >/dev/null 2>&1 && '
-             f'nice -n 19 idf.py '
-             f'-B {shlex.quote(str(BUILD_DIR))} '
-             f'-DSDKCONFIG={shlex.quote(str(E2E_DIR / "sdkconfig"))} '
-             f'-DSDKCONFIG_DEFAULTS={shlex.quote(defaults)} build'],
-            cwd=REPO_ROOT, capture_output=True, text=True,
-        )
-        if proc.returncode != 0:
-            raise RuntimeError(
-                f"v2 build failed:\n{proc.stdout[-2000:]}\n{proc.stderr[-2000:]}")
-    finally:
-        main_cpp.write_text(original)  # restore regardless of build outcome
 
     v2_bin = E2E_DIR / "v2.bin"
     v2_elf = E2E_DIR / "v2.elf"
-    shutil.copyfile(BUILD_DIR / "hello_world.bin", v2_bin)
-    shutil.copyfile(BUILD_DIR / "hello_world.elf", v2_elf)
-
-    # The host-side build competes for CPU with QEMU (TCG), which has been
-    # observed to trigger a ws reconnect storm on slow CI runners. There is
-    # no way to query the current MQTT state through pexpect (it can only
-    # wait for future output); the backend notice poller re-issues the
-    # notice until it is acknowledged, and the OTA-start window below
-    # (plus the re-deploy fallback) rides out any reconnect storm.
 
     # --- upload release + deploy ---
     rel = api.post("/v1/firmware-releases", form={
