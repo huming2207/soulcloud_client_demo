@@ -255,6 +255,11 @@ esp_err_t soulcloud_demo::demo_commands::set_config(const soulcloud::command_exe
         {store::KEY_RECONN, 100, 600000},
         {store::KEY_OTA_MAX, 65536, 67108864},
         {store::KEY_OTA_TO, 1, 3600},
+        {store::KEY_LOG_RB_SIZE, 1024, 262144},
+        {store::KEY_LOG_RB_INT, 0, 1},
+        {store::KEY_LOG_RB_FLUSH, 256, 262144},
+        {store::KEY_LOG_BATCH_CNT, 1, 4096},
+        {store::KEY_LOG_BATCH_TO, 0, 60000},
     };
     for (const num_limits &lim : NUMERIC) {
         if (strcmp(key_buf, lim.key) == 0) {
