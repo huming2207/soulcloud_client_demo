@@ -12,6 +12,7 @@
 #include <esp_err.h>
 #include <esp_eth.h>
 #include <esp_event.h>
+#include <esp_flash_dispatcher.h>
 #include <esp_log.h>
 #include <esp_mac.h>
 #include <esp_netif.h>
@@ -44,7 +45,7 @@ public:
 
     esp_err_t init();
     esp_err_t start();
-    void run();  // never returns
+    void run(); // never returns
 
 private:
     demo_app() = default;
@@ -63,7 +64,7 @@ private:
 #else
     esp_err_t wifi_connect();
 #endif
-    void run_loop();  // telemetry loop body
+    void run_loop(); // telemetry loop body
 };
 
 // ------------------------------------------------------------------ //
@@ -80,7 +81,7 @@ void demo_app::net_event_handler(void *arg, esp_event_base_t base, int32_t id, v
         esp_wifi_connect();
     } else
 #endif
-    if (base == ETH_EVENT && id == ETHERNET_EVENT_CONNECTED) {
+        if (base == ETH_EVENT && id == ETHERNET_EVENT_CONNECTED) {
         ESP_LOGI(TAG, "ethernet link up");
     } else if (base == ETH_EVENT && id == ETHERNET_EVENT_DISCONNECTED) {
         ESP_LOGW(TAG, "ethernet link down");
@@ -100,6 +101,12 @@ void demo_app::connection_cb(bool connected, void *ctx)
 
 esp_err_t demo_app::init()
 {
+    // This demo deliberately places soulcloud's large core-task stack in
+    // PSRAM. Route cache-disabling flash operations (including NVS) through
+    // Espressif's small internal-RAM worker before creating that task.
+    const esp_flash_dispatcher_config_t flash_dispatcher_cfg = ESP_FLASH_DISPATCHER_DEFAULT_CONFIG;
+    ESP_ERROR_CHECK(esp_flash_dispatcher_init(&flash_dispatcher_cfg));
+
     // NVS (config + credentials storage)
     ESP_ERROR_CHECK(nvs_flash_init());
 
@@ -180,10 +187,7 @@ esp_err_t demo_app::eth_connect()
     ESP_ERROR_CHECK(esp_eth_start(eth_handle));
 
     ESP_LOGI(TAG, "waiting for ethernet link + dhcp...");
-    const EventBits_t bits = xEventGroupWaitBits(net_events_,
-                                                 NET_CONNECTED_BIT,
-                                                 pdFALSE, pdFALSE,
-                                                 pdMS_TO_TICKS(30000));
+    const EventBits_t bits = xEventGroupWaitBits(net_events_, NET_CONNECTED_BIT, pdFALSE, pdFALSE, pdMS_TO_TICKS(30000));
     if ((bits & NET_CONNECTED_BIT) == 0) {
         ESP_LOGE(TAG, "ethernet connect timeout");
         return ESP_ERR_TIMEOUT;
@@ -191,7 +195,7 @@ esp_err_t demo_app::eth_connect()
     return ESP_OK;
 }
 
-#else  // WiFi STA
+#else // WiFi STA
 
 esp_err_t demo_app::wifi_connect()
 {
@@ -219,10 +223,7 @@ esp_err_t demo_app::wifi_connect()
     ESP_ERROR_CHECK(esp_wifi_start());
 
     ESP_LOGI(TAG, "connecting to wifi \"%s\"...", CONFIG_SOULCLOUD_DEMO_WIFI_SSID);
-    const EventBits_t bits = xEventGroupWaitBits(net_events_,
-                                                 NET_CONNECTED_BIT,
-                                                 pdFALSE, pdFALSE,
-                                                 pdMS_TO_TICKS(30000));
+    const EventBits_t bits = xEventGroupWaitBits(net_events_, NET_CONNECTED_BIT, pdFALSE, pdFALSE, pdMS_TO_TICKS(30000));
     if ((bits & NET_CONNECTED_BIT) == 0) {
         ESP_LOGE(TAG, "wifi connect timeout");
         return ESP_ERR_WIFI_NOT_CONNECT;
@@ -262,9 +263,7 @@ void demo_app::run_loop()
     for (;;) {
         // periodic telemetry (binary on9log -> MQTT via the component's log
         // sink)
-        ON9_LOGI(TAG, "tick=%u uptime=%llds heap=%u",
-                 tick,
-                 (long long)(esp_timer_get_time() / 1000000),
+        ON9_LOGI(TAG, "tick=%u uptime=%llds heap=%u", tick, (long long)(esp_timer_get_time() / 1000000),
                  (unsigned)esp_get_free_heap_size());
 
         if (tick % 30 == 1) {
@@ -273,7 +272,7 @@ void demo_app::run_loop()
 
         if (soulcloud_demo::demo_commands::reboot_pending()) {
             ESP_LOGI(TAG, "reboot command acknowledged; restarting");
-            vTaskDelay(pdMS_TO_TICKS(1000));  // let the result flush
+            vTaskDelay(pdMS_TO_TICKS(1000)); // let the result flush
             esp_restart();
         }
 
@@ -289,8 +288,8 @@ void demo_app::run()
 
 extern "C" void app_main(void)
 {
-demo_app &app = demo_app::instance();
-ESP_ERROR_CHECK(app.init());
-ESP_ERROR_CHECK(app.start());
-app.run();
+    demo_app &app = demo_app::instance();
+    ESP_ERROR_CHECK(app.init());
+    ESP_ERROR_CHECK(app.start());
+    app.run();
 }

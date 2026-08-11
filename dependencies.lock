@@ -1,4 +1,14 @@
 dependencies:
+  espressif/esp_flash_dispatcher:
+    component_hash: 698e866a2860e3c432df1a096589c7c15595584337c4d80111d02d936356d543
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.2'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.0.2
   espressif/mqtt:
     component_hash: fb18bc3b65aa8c94693a9811ffc322cca8a65d92d5ec84983d3e385080e3969c
     dependencies:
@@ -14,8 +24,9 @@ dependencies:
       type: idf
     version: 6.0.2
 direct_dependencies:
+- espressif/esp_flash_dispatcher
 - espressif/mqtt
 - idf
-manifest_hash: 8dbbea53ea1adfd61d7cd94c8c1b15649f034bc78059135941ca029aa43a3092
+manifest_hash: b34c755424613ee9537f2f1106536a7c6cb6a40f149fef80a7ad20e408eadc8d
 target: esp32s3
 version: 3.0.0
