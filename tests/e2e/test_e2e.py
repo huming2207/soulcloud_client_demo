@@ -36,7 +36,7 @@ def test_connect_and_stat(dut: Dut, api, device) -> None:
     the built ELF's SHA-256 (the backend's artifact buildId)."""
     dut.expect(r"Calling app_main", timeout=120)
     dut.expect(r"got ip \d+\.\d+\.\d+\.\d+", timeout=60)
-    dut.expect(r"connected; subscribed to cmd/exec and ota", timeout=60)
+    dut.expect(r"downlink ready", timeout=60)
 
     # the stat may land a moment after the MQTT connect; poll until the
     # backend has firmware_state with our exact ELF buildId
@@ -63,7 +63,7 @@ def test_connect_and_stat(dut: Dut, api, device) -> None:
 def test_command_roundtrip(dut: Dut, api) -> None:
     """POST /v1/command-batches getInfo -> device executes -> result 0
     recorded with state device_completed."""
-    dut.expect(r"connected; subscribed to cmd/exec and ota", timeout=120)
+    dut.expect(r"downlink ready", timeout=120)
 
     batch = api.send_command("getInfo")
     api.wait_command(batch, "device_completed")
@@ -81,7 +81,7 @@ def test_command_roundtrip(dut: Dut, api) -> None:
 def test_log_decode(dut: Dut, api, device) -> None:
     """Upload the v1 ELF as a firmware artifact; on9log log packets must
     be backfilled/associated and decode to tag + message."""
-    dut.expect(r"connected; subscribed to cmd/exec and ota", timeout=120)
+    dut.expect(r"downlink ready", timeout=120)
 
     art = api.post("/v1/firmware-artifacts", form={
         "project_id": device.project_id,
@@ -112,7 +112,7 @@ def test_ota(dut: Dut, api, device) -> None:
     no host compile runs while QEMU is active (a running compile starves
     the TCG thread on 2-core CI runners and triggers the ws reconnect
     storm)."""
-    dut.expect(r"connected; subscribed to cmd/exec and ota", timeout=120)
+    dut.expect(r"downlink ready", timeout=120)
 
     v2_bin = E2E_DIR / "v2.bin"
     v2_elf = E2E_DIR / "v2.elf"
@@ -171,7 +171,7 @@ def test_resilience(dut: Dut, api, backend, device) -> None:
     after the broker comes back, and command delivery must resume."""
     if not backend.broker_pid:
         pytest.skip("broker not managed by this session (reusing an external backend)")
-    dut.expect(r"connected; subscribed to cmd/exec and ota", timeout=120)
+    dut.expect(r"downlink ready", timeout=120)
 
     # kill broker
     subprocess.run(["kill", str(backend.broker_pid)], check=True)
@@ -190,7 +190,7 @@ def test_resilience(dut: Dut, api, backend, device) -> None:
                                 start_new_session=True)  # own process group for teardown
     backend.broker_pid = proc.pid
 
-    dut.expect(r"connected; subscribed to cmd/exec and ota", timeout=120)
+    dut.expect(r"downlink ready", timeout=120)
 
     # command delivery resumes
     batch = api.send_command("getInfo")

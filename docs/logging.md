@@ -64,8 +64,9 @@ publish them as one `0x01` container:
 The batch (4 KiB static buffer, internal RAM) flushes on **any** of:
 
 1. `log_batch_count` packets accumulated,
-2. 128 elements or the 4 KiB byte budget (defensive caps from the
-   protocol doc),
+2. 100 elements (the backend charges one rate token per ELEMENT with a
+   100-token burst, so a larger container could never be accepted) or
+   the 4 KiB byte budget,
 3. `log_batch_timeout_ms` elapsed since the first packet of the batch
    (no upload happens if the batch is empty),
 4. the ring buffer's free space drops below `log_rb_flush_at`
