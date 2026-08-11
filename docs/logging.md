@@ -8,7 +8,8 @@ on9log core (components/on9log, submodule @ 8c11225)
   ├─ filters (level / tag), ISR ringbuffer path
   └─ dispatch to registered sinks (start / payload / end callbacks)
        ├─ on9log_esp_vfs (UART console + SLIP)  — local debugging / host decoder
-       └─ soulcloud log_sender                  — MQTT `log` topic, QoS 0, throttled
+       └─ soulcloud log_sender                  — MQTT `log` topic, QoS 0,
+                                                 throttled, optional batching
 ```
 
 Both sinks run in parallel in every build: the VFS sink emits the
@@ -18,7 +19,7 @@ same packets to the `log` topic.
 
 - `log_sender` (see `components/soulcloud/src/logs.cpp`) is a
   **producer/consumer pair over a FreeRTOS ring buffer**
-  (`SOULCLOUD_LOG_RB_SIZE`, default 16 KiB, PSRAM):
+  (`log_rb_size`, default 16 KiB):
   - producer: the on9log sink callbacks (running on the log source's
     task) reassemble each packet under a static mutex and enqueue it with
     a zero-tick wait — a full ring buffer drops the packet (logs are
@@ -27,29 +28,65 @@ same packets to the `log` topic.
     zero-tick receives on a 1-tick interval (empty == NULL return, no
     signalling needed) and publishes to
     `soulcloud/v1/devices/{uid}/log` at QoS 0, throttled to
-    `SOULCLOUD_LOG_RATE_PER_S` (default 10 msg/s; the server guard allows
-    20/s). Packets over the limit are dropped silently.
-- One MQTT `log` message == one complete on9log packet (no SLIP on the MQTT
-  path). `payload_len` must equal the actual payload length (backend
+    `log_rate_per_s` (default 10 msg/s; the server guard allows 20/s).
+    Packets over the limit are dropped silently (counted, surfaced via
+    the drop WARN below). While disconnected the consumer does not drain
+    the ring buffer, so nothing is lost to a reconnect blip.
+- One MQTT `log` message is either one raw on9log packet (first byte
+  `0x9a`) or, in batching mode, an aggregated container (first byte
+  `0x01`, a MessagePack array of on9log packets — see
+  `soulcloudjs/docs/PROTOCOL.log-packaging.md`). No SLIP on the MQTT
+  path. `payload_len` must equal the actual payload length (backend
   enforces `packet.length == 18 + payload_len`).
 - on9log core emits its own DROPPED packets (ISR ringbuffer overflow) through
   the same sink; the MQTT-side throttle drops are transport policy and are
   not reported as DROPPED packets.
+- **Drop visibility**: packets dropped device-side (ring buffer full,
+  throttle, or publish failure) accumulate in a counter; while connected,
+  a WARN packet is emitted through on9log at most once per second so the
+  backend can tell "device logged nothing" from "device dropped logs".
+
+## Batching mode (log aggregation)
+
+By default (`log_batch_count` = 1) every packet is published immediately
+as a raw `0x9a` message — lowest latency, matching the platform's
+realtime log stream. Set `log_batch_count` > 1 to accumulate packets and
+publish them as one `0x01` container:
+
+| Config | NVS key | Range | Default | Meaning |
+| --- | --- | --- | --- | --- |
+| `log_batch_count` | `batch_cnt` | 1..4096 | 1 | Packets per publish; 1 = disabled (raw single-packet mode) |
+| `log_batch_timeout_ms` | `batch_to` | 0..60000 | 0 | Force-flush a non-empty batch this long after it started; 0 = no timer |
+| `log_rb_size` | `rb_size` | 1024..262144 | 16384 | Log ring buffer size in bytes |
+| `log_rb_internal` | `rb_int` | 0/1 | 1 | 1 = internal SRAM, 0 = PSRAM (internal RAM is always safe during OTA flash writes, which suspend the cache) |
+| `log_rb_flush_at` | `rb_flush` | 256..rb_size | 8192 | Flush the pending batch when free space drops below this (bytes) |
+
+The batch (4 KiB static buffer, internal RAM) flushes on **any** of:
+
+1. `log_batch_count` packets accumulated,
+2. 128 elements or the 4 KiB byte budget (defensive caps from the
+   protocol doc),
+3. `log_batch_timeout_ms` elapsed since the first packet of the batch
+   (no upload happens if the batch is empty),
+4. the ring buffer's free space drops below `log_rb_flush_at`
+   (backpressure — checked before draining, so it can actually fire
+   under sustained production).
+
+The container consumes one rate-limit token per publish, exactly like a
+raw packet. QoS stays 0: log uplink is best-effort telemetry (drops are
+counted and surfaced via the WARN), and QoS 1 with a persistent session
+was observed to queue unacknowledged messages and destabilise the
+connection on slow links. The packaging doc's "QoS 1" line is
+internally inconsistent (it also says "exactly like a raw packet",
+which is QoS 0) and is treated as a doc bug.
 
 ### QEMU / E2E: console decoded by the host tool
 
-In the QEMU harness the emulated console carries ESP_LOG text interleaved
-with the SLIP stream. `scripts/qemu-on9log-wrap.sh` pipes QEMU's stdout
-through `on9log --log-stdin --elf app.elf` (the on9log host decoder):
-SLIP frames are decoded to readable log lines against the firmware ELF
-and non-frame bytes (ESP_LOG text) pass through verbatim, so the harness
-matches plain text only.
-- One MQTT `log` message == one complete on9log packet (no SLIP on the MQTT
-  path). `payload_len` must equal the actual payload length (backend
-  enforces `packet.length == 18 + payload_len`).
-- on9log core emits its own DROPPED packets (ISR ringbuffer overflow) through
-  the same sink; the MQTT-side throttle drops are transport policy and are
-  not reported as DROPPED packets.
+In the QEMU harness the emulated console carries ESP_LOG text only (the
+eth build skips the on9log VFS sink; real devices keep the dual
+output). `scripts/qemu-on9log-wrap.sh` pipes QEMU's stdout through the
+on9log host decoder, which passes non-SLIP bytes through verbatim, so
+the harness matches plain text only.
 
 ## String dictionary (server side)
 

@@ -91,7 +91,12 @@ Two network modes (Kconfig `SOULCLOUD_DEMO_NET_IF`):
 Set the provisioned credentials + broker/API addresses via `idf.py
 menuconfig` (Soulcloud client → device/broker/api) or by editing the
 `sdkconfig`; they can also be overridden at runtime with the `setConfig`
-command (NVS-backed).
+command (NVS-backed). Runtime-tunable keys (see `soulcloud.hpp`
+`KEY_*`): `uid` `pass` `serial` `broker` `api`, `stat_int` `log_rate`
+`mqtt_in` `mqtt_out` `ka` `reconn` `ota_max` `ota_to`, and the log
+uplink keys `rb_size` `rb_int` `rb_flush` `batch_cnt` `batch_to` (log
+aggregation, see `docs/logging.md`). Changes take effect on the next
+boot (config is loaded once at init).
 
 ### QEMU flash image (E2E)
 
