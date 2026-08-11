@@ -24,14 +24,13 @@ same packets to the `log` topic.
     task) reassemble each packet under a static mutex and enqueue it with
     a zero-tick wait — a full ring buffer drops the packet (logs are
     lossy telemetry). No MQTT work happens on the producer side.
-  - consumer: the soulcloud core task polls the ring buffer with
-    zero-tick receives on a 1-tick interval (empty == NULL return, no
-    signalling needed) and publishes to
+  - consumer: a successful enqueue notifies the event-driven soulcloud
+    core task; it drains with zero-tick receives and publishes to
     `soulcloud/v1/devices/{uid}/log` at QoS 0, throttled to
-    `log_rate_per_s` (default 10 msg/s; the server guard allows 20/s).
-    Packets over the limit are dropped silently (counted, surfaced via
-    the drop WARN below). While disconnected the consumer does not drain
-    the ring buffer, so nothing is lost to a reconnect blip.
+    `log_rate_per_s` (default 10 packet tokens/s; the server guard
+    allows 20/s with burst 100). Packets wait in the ring buffer until
+    rate credit is available. While disconnected the consumer does not
+    drain the ring buffer, so nothing is lost to a reconnect blip.
 - One MQTT `log` message is either one raw on9log packet (first byte
   `0x9a`) or, in batching mode, an aggregated container (first byte
   `0x01`, a MessagePack array of on9log packets — see
@@ -39,10 +38,10 @@ same packets to the `log` topic.
   path. `payload_len` must equal the actual payload length (backend
   enforces `packet.length == 18 + payload_len`).
 - on9log core emits its own DROPPED packets (ISR ringbuffer overflow) through
-  the same sink; the MQTT-side throttle drops are transport policy and are
-  not reported as DROPPED packets.
-- **Drop visibility**: packets dropped device-side (ring buffer full,
-  throttle, or publish failure) accumulate in a counter; while connected,
+  the same sink; the MQTT-side queue and publish failures are tracked by the
+  transport-level WARN below.
+- **Drop visibility**: packets dropped device-side (ring buffer full or
+  publish failure) accumulate in a counter; while connected,
   a WARN packet is emitted through on9log at most once per second so the
   backend can tell "device logged nothing" from "device dropped logs".
 
@@ -64,20 +63,20 @@ publish them as one `0x01` container:
 The batch (4 KiB static buffer, internal RAM) flushes on **any** of:
 
 1. `log_batch_count` packets accumulated,
-2. 100 elements (the backend charges one rate token per ELEMENT with a
-   100-token burst, so a larger container could never be accepted) or
+2. 80 elements (the backend charges one rate token per ELEMENT with a
+   shared 100-token burst; 20 tokens remain for control uplinks) or
    the 4 KiB byte budget,
 3. `log_batch_timeout_ms` elapsed since the first packet of the batch
    (no upload happens if the batch is empty),
 4. the ring buffer's free space drops below `log_rb_flush_at`
-   (backpressure — checked before draining, so it can actually fire
-   under sustained production).
+   (backpressure).
 
-The container consumes one rate-limit token per publish on the device
-side, but the backend charges one token per ELEMENT (burst 100), so the
-sustained log rate is bounded by the backend's 20 elements/s refill, not
-by the device throttle. Keep containers well under 100 elements (the
-hard cap is 100) to stay within a full bucket. QoS stays 0: log uplink is best-effort telemetry (drops are
+The device mirrors the backend token accounting: a raw packet costs one
+token and a container costs one token per element. Its log bucket has an
+80-token burst, leaving 20 tokens in the backend's shared 100-token bucket
+for stat/command/OTA results. Device refill is `log_rate_per_s` (default
+10), below the backend default of 20. The hard container cap is 80. QoS stays
+0: log uplink is best-effort telemetry (drops are
 counted and surfaced via the WARN), and QoS 1 with a persistent session
 was observed to queue unacknowledged messages and destabilise the
 connection on slow links. The packaging doc's "QoS 1" line is
