@@ -203,18 +203,43 @@ esp_err_t soulcloud_demo::demo_commands::set_config(const soulcloud::command_exe
         return ESP_OK;
     }
 
+    using store = soulcloud::config_store;
+
     char key_buf[16] = {};
     memcpy(key_buf, key, key_len);
-    char value_buf[256] = {};
-    if (value != nullptr && value_len < sizeof(value_buf)) {
-        memcpy(value_buf, value, value_len);
+    if (value == nullptr) {
+        ESP_LOGW(TAG, "setConfig: value missing for %s", key_buf);
+        out->code = -1;
+        return ESP_OK;
     }
-
-    using store = soulcloud::config_store;
+    // per-key length caps match the component's load buffers
+    // (uid/pass 128, serial 32, broker/api 256); a longer value would be
+    // written to NVS but silently fall back to the default on load
+    size_t max_val = 255;
+    if (strcmp(key_buf, store::KEY_UID) == 0 || strcmp(key_buf, store::KEY_PASS) == 0) {
+        max_val = 127;
+    } else if (strcmp(key_buf, store::KEY_SERIAL) == 0) {
+        max_val = 31;
+    }
+    if (value_len > max_val) {
+        ESP_LOGW(TAG, "setConfig: value too long for %s (max %u)", key_buf, (unsigned)max_val);
+        out->code = -1;
+        return ESP_OK;
+    }
+    char value_buf[256] = {};
+    memcpy(value_buf, value, value_len);
 
     // String keys: whitelist + content checks (the component's set_string
     // writes any NVS key, so unknown keys must be rejected here).
     const bool is_uid = strcmp(key_buf, store::KEY_UID) == 0;
+    if (value_len == 0 &&
+        (is_uid || strcmp(key_buf, store::KEY_PASS) == 0 ||
+         strcmp(key_buf, store::KEY_BROKER) == 0 ||
+         strcmp(key_buf, store::KEY_API) == 0)) {
+        ESP_LOGW(TAG, "setConfig: %s must not be empty", key_buf);
+        out->code = -1;
+        return ESP_OK;
+    }
     if (is_uid || strcmp(key_buf, store::KEY_PASS) == 0 ||
         strcmp(key_buf, store::KEY_SERIAL) == 0 ||
         strcmp(key_buf, store::KEY_BROKER) == 0 ||
@@ -233,7 +258,10 @@ esp_err_t soulcloud_demo::demo_commands::set_config(const soulcloud::command_exe
             }
         }
         const esp_err_t err = store::instance().set_string(key_buf, value_buf);
-        ESP_LOGI(TAG, "setConfig %s=%s -> %s", key_buf, value_buf, esp_err_to_name(err));
+        // never log secret values: a rotated credential must not leak via
+        // the serial console or the log uplink
+        const char *shown = (strcmp(key_buf, store::KEY_PASS) == 0) ? "<redacted>" : value_buf;
+        ESP_LOGI(TAG, "setConfig %s=%s -> %s", key_buf, shown, esp_err_to_name(err));
         out->code = (err == ESP_OK) ? 0 : -2;
         return ESP_OK;
     }
