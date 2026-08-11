@@ -26,6 +26,15 @@ jobs:
         with:
           submodules: recursive
 
+      # The demo must record an already-pushed component commit; a stale
+      # gitlink silently makes CI test the old component (GPT ESP-R1).
+      - name: Verify components/soulcloud gitlink
+        run: |
+          git -C components/soulcloud fetch origin master --depth 1
+          test "$(git ls-tree HEAD components/soulcloud | awk '{print $3}')" = \
+               "$(git -C components/soulcloud rev-parse origin/master)" \
+            || { echo "::error::components/soulcloud gitlink points at an unpushed commit; push the submodule first"; exit 1; }
+
       # Host-compilable protocol tests (no ESP-IDF needed): build + run
       # against the golden soulcloud.js fixtures. Exit code is the
       # assertion (0 = all checks passed).

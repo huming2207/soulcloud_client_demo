@@ -73,8 +73,11 @@ The batch (4 KiB static buffer, internal RAM) flushes on **any** of:
    (backpressure — checked before draining, so it can actually fire
    under sustained production).
 
-The container consumes one rate-limit token per publish, exactly like a
-raw packet. QoS stays 0: log uplink is best-effort telemetry (drops are
+The container consumes one rate-limit token per publish on the device
+side, but the backend charges one token per ELEMENT (burst 100), so the
+sustained log rate is bounded by the backend's 20 elements/s refill, not
+by the device throttle. Keep containers well under 100 elements (the
+hard cap is 100) to stay within a full bucket. QoS stays 0: log uplink is best-effort telemetry (drops are
 counted and surfaced via the WARN), and QoS 1 with a persistent session
 was observed to queue unacknowledged messages and destabilise the
 connection on slow links. The packaging doc's "QoS 1" line is
