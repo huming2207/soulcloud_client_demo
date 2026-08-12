@@ -12,7 +12,9 @@
 #include <esp_err.h>
 #include <esp_eth.h>
 #include <esp_event.h>
+#if CONFIG_SOULCLOUD_CORE_TASK_STACK_PSRAM
 #include <esp_flash_dispatcher.h>
+#endif
 #include <esp_log.h>
 #include <esp_mac.h>
 #include <esp_netif.h>
@@ -101,11 +103,13 @@ void demo_app::connection_cb(bool connected, void *ctx)
 
 esp_err_t demo_app::init()
 {
-    // This demo deliberately places soulcloud's large core-task stack in
-    // PSRAM. Route cache-disabling flash operations (including NVS) through
+    // When this demo places soulcloud's large core-task stack in PSRAM,
+    // route cache-disabling flash operations (including NVS) through
     // Espressif's small internal-RAM worker before creating that task.
+#if CONFIG_SOULCLOUD_CORE_TASK_STACK_PSRAM
     const esp_flash_dispatcher_config_t flash_dispatcher_cfg = ESP_FLASH_DISPATCHER_DEFAULT_CONFIG;
     ESP_ERROR_CHECK(esp_flash_dispatcher_init(&flash_dispatcher_cfg));
+#endif
 
     // NVS (config + credentials storage)
     ESP_ERROR_CHECK(nvs_flash_init());
@@ -250,7 +254,7 @@ esp_err_t demo_app::start()
     ESP_ERROR_CHECK(soulcloud::config_store::instance().load(&cfg));
 
     soulcloud::soulcloud_client &client = soulcloud::soulcloud_client::instance();
-    ESP_ERROR_CHECK(soulcloud_demo::demo_commands::register_all(client));
+    ESP_ERROR_CHECK(soulcloud_demo::demo_commands::register_all(client, xTaskGetCurrentTaskHandle()));
     client.set_connection_cb(connection_cb, this);
     ESP_ERROR_CHECK(client.init(&cfg));
     ESP_ERROR_CHECK(client.start());
@@ -270,13 +274,14 @@ void demo_app::run_loop()
             ON9_LOGW(TAG, "sample warning: free heap %u bytes", (unsigned)esp_get_free_heap_size());
         }
 
-        if (soulcloud_demo::demo_commands::reboot_pending()) {
+        // A command handler wakes this task directly; the timeout also
+        // provides the 10-second telemetry cadence without polling a
+        // cross-task flag.
+        if (ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(10000)) > 0) {
             ESP_LOGI(TAG, "reboot command acknowledged; restarting");
             vTaskDelay(pdMS_TO_TICKS(1000)); // let the result flush
             esp_restart();
         }
-
-        vTaskDelay(pdMS_TO_TICKS(10000));
         tick++;
     }
 }

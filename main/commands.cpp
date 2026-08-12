@@ -22,8 +22,6 @@
 
 using namespace soulcloud_demo;
 
-volatile bool soulcloud_demo::demo_commands::s_reboot_pending = false;
-
 // Per-instance state handed to every handler as its ctx (see commands.hpp).
 // Handlers run synchronously on the dedicated soulcloud core task, so the
 // buffers are single-threaded.
@@ -32,23 +30,40 @@ demo_state soulcloud_demo::demo_commands::s_state;
 const char *reset_reason_str(esp_reset_reason_t r)
 {
     switch (r) {
-    case ESP_RST_UNKNOWN: return "UNKNOWN";
-    case ESP_RST_POWERON: return "POWERON";
-    case ESP_RST_EXT: return "EXT";
-    case ESP_RST_SW: return "SW";
-    case ESP_RST_PANIC: return "PANIC";
-    case ESP_RST_INT_WDT: return "INT_WDT";
-    case ESP_RST_TASK_WDT: return "TASK_WDT";
-    case ESP_RST_WDT: return "WDT";
-    case ESP_RST_DEEPSLEEP: return "DEEPSLEEP";
-    case ESP_RST_BROWNOUT: return "BROWNOUT";
-    case ESP_RST_SDIO: return "SDIO";
-    case ESP_RST_USB: return "USB";
-    case ESP_RST_JTAG: return "JTAG";
-    case ESP_RST_EFUSE: return "EFUSE";
-    case ESP_RST_PWR_GLITCH: return "PWR_GLITCH";
-    case ESP_RST_CPU_LOCKUP: return "CPU_LOCKUP";
-    default: return "UNKNOWN";
+    case ESP_RST_UNKNOWN:
+        return "UNKNOWN";
+    case ESP_RST_POWERON:
+        return "POWERON";
+    case ESP_RST_EXT:
+        return "EXT";
+    case ESP_RST_SW:
+        return "SW";
+    case ESP_RST_PANIC:
+        return "PANIC";
+    case ESP_RST_INT_WDT:
+        return "INT_WDT";
+    case ESP_RST_TASK_WDT:
+        return "TASK_WDT";
+    case ESP_RST_WDT:
+        return "WDT";
+    case ESP_RST_DEEPSLEEP:
+        return "DEEPSLEEP";
+    case ESP_RST_BROWNOUT:
+        return "BROWNOUT";
+    case ESP_RST_SDIO:
+        return "SDIO";
+    case ESP_RST_USB:
+        return "USB";
+    case ESP_RST_JTAG:
+        return "JTAG";
+    case ESP_RST_EFUSE:
+        return "EFUSE";
+    case ESP_RST_PWR_GLITCH:
+        return "PWR_GLITCH";
+    case ESP_RST_CPU_LOCKUP:
+        return "CPU_LOCKUP";
+    default:
+        return "UNKNOWN";
     }
 }
 
@@ -77,25 +92,29 @@ soulcloud::cmd_arg_value make_bool(bool b)
     return v;
 }
 
-bool soulcloud_demo::demo_commands::reboot_pending()
+bool soulcloud_demo::demo_commands::contains_nul(const char *value, size_t len)
 {
-    return s_reboot_pending;
+    for (size_t i = 0; i < len; ++i) {
+        if (value[i] == '\0') {
+            return true;
+        }
+    }
+    return false;
 }
 
-esp_err_t soulcloud_demo::demo_commands::register_all(soulcloud::soulcloud_client &client)
+esp_err_t soulcloud_demo::demo_commands::register_all(soulcloud::soulcloud_client &client, TaskHandle_t app_task)
 {
+    if (app_task == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    s_state.app_task = app_task;
     // Register with the shared state as ctx. Errors are returned (not
     // asserted) so app_main decides what to do.
-    ESP_RETURN_ON_ERROR(client.register_command("getInfo", get_info, &s_state), TAG,
-                        "register getInfo");
-    ESP_RETURN_ON_ERROR(client.register_command("reboot", reboot, &s_state), TAG,
-                        "register reboot");
-    ESP_RETURN_ON_ERROR(client.register_command("setLogging", set_logging, &s_state), TAG,
-                        "register setLogging");
-    ESP_RETURN_ON_ERROR(client.register_command("setConfig", set_config, &s_state), TAG,
-                        "register setConfig");
-    ESP_RETURN_ON_ERROR(client.register_command("echo", echo, &s_state), TAG,
-                        "register echo");
+    ESP_RETURN_ON_ERROR(client.register_command("getInfo", get_info, &s_state), TAG, "register getInfo");
+    ESP_RETURN_ON_ERROR(client.register_command("reboot", reboot, &s_state), TAG, "register reboot");
+    ESP_RETURN_ON_ERROR(client.register_command("setLogging", set_logging, &s_state), TAG, "register setLogging");
+    ESP_RETURN_ON_ERROR(client.register_command("setConfig", set_config, &s_state), TAG, "register setConfig");
+    ESP_RETURN_ON_ERROR(client.register_command("echo", echo, &s_state), TAG, "register echo");
     return ESP_OK;
 }
 
@@ -107,8 +126,11 @@ esp_err_t soulcloud_demo::demo_commands::get_info(const soulcloud::command_exec 
         return ESP_ERR_INVALID_ARG;
     }
 
-    soulcloud::config cfg;
-    soulcloud::config_store::instance().load(&cfg);
+    soulcloud::config cfg = {};
+    const esp_err_t config_err = soulcloud::config_store::instance().load(&cfg);
+    if (config_err != ESP_OK) {
+        return config_err;
+    }
     snprintf(st->uid, sizeof(st->uid), "%s", cfg.device_uid);
     esp_app_get_elf_sha256(st->fw, sizeof(st->fw));
     snprintf(st->rst, sizeof(st->rst), "%s", reset_reason_str(esp_reset_reason()));
@@ -154,23 +176,32 @@ esp_err_t soulcloud_demo::demo_commands::get_info(const soulcloud::command_exec 
 esp_err_t soulcloud_demo::demo_commands::reboot(const soulcloud::command_exec *cmd, soulcloud::command_result *out, void *ctx)
 {
     (void)cmd;
-    (void)ctx;
+    demo_state *st = static_cast<demo_state *>(ctx);
+    if (st == nullptr || st->app_task == nullptr) {
+        return ESP_ERR_INVALID_ARG;
+    }
     out->code = 0;
-    s_reboot_pending = true;  // main loop performs the actual restart
+    xTaskNotifyGive(st->app_task); // main task delays briefly, then restarts
     return ESP_OK;
 }
 
-esp_err_t soulcloud_demo::demo_commands::set_logging(const soulcloud::command_exec *cmd, soulcloud::command_result *out, void *ctx)
+esp_err_t soulcloud_demo::demo_commands::set_logging(const soulcloud::command_exec *cmd, soulcloud::command_result *out,
+                                                     void *ctx)
 {
     (void)ctx;
     // args: [{enabled: bool}]
     bool enabled = false;
+    bool found = false;
     for (uint32_t i = 0; i < cmd->arg_count; ++i) {
         const soulcloud::cmd_arg *a = &cmd->args[i];
-        if (a->key_len == 7 && memcmp(a->key, "enabled", 7) == 0 &&
-            a->value.type == soulcloud::cmd_arg_value::TYPE_BOOL) {
+        if (a->key_len == 7 && memcmp(a->key, "enabled", 7) == 0 && a->value.type == soulcloud::cmd_arg_value::TYPE_BOOL) {
             enabled = a->value.b;
+            found = true;
         }
+    }
+    if (!found) {
+        out->code = -1;
+        return ESP_OK;
     }
     on9log_set_level(enabled ? ON9_LOG_LEVEL_VERBOSE : ON9_LOG_LEVEL_INFO);
     ESP_LOGI(TAG, "setLogging: %s", enabled ? "verbose" : "info");
@@ -198,7 +229,7 @@ esp_err_t soulcloud_demo::demo_commands::set_config(const soulcloud::command_exe
             }
         }
     }
-    if (key == nullptr || key_len == 0 || key_len >= 16) {
+    if (key == nullptr || key_len == 0 || key_len >= 16 || contains_nul(key, key_len)) {
         out->code = -1;
         return ESP_OK;
     }
@@ -209,6 +240,11 @@ esp_err_t soulcloud_demo::demo_commands::set_config(const soulcloud::command_exe
     memcpy(key_buf, key, key_len);
     if (value == nullptr) {
         ESP_LOGW(TAG, "setConfig: value missing for %s", key_buf);
+        out->code = -1;
+        return ESP_OK;
+    }
+    if (contains_nul(value, value_len)) {
+        ESP_LOGW(TAG, "setConfig: value contains NUL");
         out->code = -1;
         return ESP_OK;
     }
@@ -232,23 +268,19 @@ esp_err_t soulcloud_demo::demo_commands::set_config(const soulcloud::command_exe
     // String keys: whitelist + content checks (the component's set_string
     // writes any NVS key, so unknown keys must be rejected here).
     const bool is_uid = strcmp(key_buf, store::KEY_UID) == 0;
-    if (value_len == 0 &&
-        (is_uid || strcmp(key_buf, store::KEY_PASS) == 0 ||
-         strcmp(key_buf, store::KEY_BROKER) == 0 ||
-         strcmp(key_buf, store::KEY_API) == 0)) {
+    if (value_len == 0 && (is_uid || strcmp(key_buf, store::KEY_PASS) == 0 || strcmp(key_buf, store::KEY_BROKER) == 0 ||
+                           strcmp(key_buf, store::KEY_API) == 0)) {
         ESP_LOGW(TAG, "setConfig: %s must not be empty", key_buf);
         out->code = -1;
         return ESP_OK;
     }
-    if (is_uid || strcmp(key_buf, store::KEY_PASS) == 0 ||
-        strcmp(key_buf, store::KEY_SERIAL) == 0 ||
-        strcmp(key_buf, store::KEY_BROKER) == 0 ||
-        strcmp(key_buf, store::KEY_API) == 0) {
+    if (is_uid || strcmp(key_buf, store::KEY_PASS) == 0 || strcmp(key_buf, store::KEY_SERIAL) == 0 ||
+        strcmp(key_buf, store::KEY_BROKER) == 0 || strcmp(key_buf, store::KEY_API) == 0) {
         // uid must stay topic-safe: no '/', '+', '#' or whitespace
         if (is_uid) {
             // no '/', '+', '#' or ANY whitespace (the backend rejects all
             // of it; topics must stay single-level)
-            for (size_t i = 0; i < strlen(value_buf); ++i) {
+            for (size_t i = 0; i < value_len; ++i) {
                 const unsigned char c = (unsigned char)value_buf[i];
                 if (c == '/' || c == '+' || c == '#' || isspace(c)) {
                     ESP_LOGW(TAG, "setConfig: uid contains a topic-reserved character");
@@ -268,26 +300,17 @@ esp_err_t soulcloud_demo::demo_commands::set_config(const soulcloud::command_exe
 
     // Numeric keys: whitelist + range check (same ranges the component
     // clamps to on load; a value outside them is rejected, not stored).
-    struct num_limits
-    {
+    struct num_limits {
         const char *key;
         uint32_t min;
         uint32_t max;
     };
     static constexpr num_limits NUMERIC[] = {
-        {store::KEY_STAT_INT, 1, 86400},
-        {store::KEY_LOG_RATE, 1, 20},  // broker guard: 20/s
-        {store::KEY_MQTT_IN, 512, 65536},
-        {store::KEY_MQTT_OUT, 512, 65536},
-        {store::KEY_KA, 5, 3600},
-        {store::KEY_RECONN, 100, 600000},
-        {store::KEY_OTA_MAX, 65536, 67108864},
-        {store::KEY_OTA_TO, 1, 3600},
-        {store::KEY_LOG_RB_SIZE, 1024, 262144},
-        {store::KEY_LOG_RB_INT, 0, 1},
-        {store::KEY_LOG_RB_FLUSH, 256, 262144},
-        {store::KEY_LOG_BATCH_CNT, 1, 4096},
-        {store::KEY_LOG_BATCH_TO, 0, 60000},
+        {store::KEY_STAT_INT, 1, 86400},        {store::KEY_LOG_RATE, 1, 20}, // broker guard: 20/s
+        {store::KEY_MQTT_IN, 512, 65536},       {store::KEY_MQTT_OUT, 512, 65536},     {store::KEY_KA, 5, 3600},
+        {store::KEY_RECONN, 100, 600000},       {store::KEY_OTA_MAX, 65536, 67108864}, {store::KEY_OTA_TO, 1, 3600},
+        {store::KEY_LOG_RB_SIZE, 1024, 262144}, {store::KEY_LOG_RB_INT, 0, 1},         {store::KEY_LOG_RB_FLUSH, 256, 262144},
+        {store::KEY_LOG_BATCH_CNT, 1, 4096},    {store::KEY_LOG_BATCH_TO, 0, 60000},
     };
     for (const num_limits &lim : NUMERIC) {
         if (strcmp(key_buf, lim.key) == 0) {
@@ -295,8 +318,8 @@ esp_err_t soulcloud_demo::demo_commands::set_config(const soulcloud::command_exe
             errno = 0;
             const unsigned long v = strtoul(value_buf, &end, 10);
             if (errno != 0 || end == value_buf || *end != '\0' || v < lim.min || v > lim.max) {
-                ESP_LOGW(TAG, "setConfig: %s=%s out of range [%lu, %lu]",
-                         key_buf, value_buf, (unsigned long)lim.min, (unsigned long)lim.max);
+                ESP_LOGW(TAG, "setConfig: %s=%s out of range [%lu, %lu]", key_buf, value_buf, (unsigned long)lim.min,
+                         (unsigned long)lim.max);
                 out->code = -1;
                 return ESP_OK;
             }
@@ -316,7 +339,7 @@ esp_err_t soulcloud_demo::demo_commands::echo(const soulcloud::command_exec *cmd
 {
     (void)ctx;
     out->code = 0;
-    out->args = cmd->args;  // echo the received args verbatim
+    out->args = cmd->args; // echo the received args verbatim
     out->arg_count = cmd->arg_count;
     return ESP_OK;
 }

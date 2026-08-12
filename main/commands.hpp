@@ -12,6 +12,8 @@
 
 #include <cstdint>
 
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 #include <soulcloud.hpp>
 
 namespace soulcloud_demo
@@ -22,12 +24,12 @@ namespace soulcloud_demo
      * Handlers run synchronously on the dedicated soulcloud core task,
      * so the payload buffers below are single-threaded.
      */
-    struct demo_state
-    {
-        soulcloud::cmd_arg args[6];  // getInfo result payload slots
-        char uid[128];               // getInfo: device uid
-        char fw[65];                 // getInfo: ELF SHA-256 hex
-        char rst[16];                // getInfo: reset reason
+    struct demo_state {
+        soulcloud::cmd_arg args[6]; // getInfo result payload slots
+        char uid[128];              // getInfo: device uid
+        char fw[65];                // getInfo: ELF SHA-256 hex
+        char rst[16];               // getInfo: reset reason
+        TaskHandle_t app_task;      // notified after reboot result is prepared
     };
 
     class demo_commands
@@ -43,17 +45,14 @@ namespace soulcloud_demo
          * @param[in] client Client to register on.
          * @return ESP_OK or ESP_ERR_INVALID_ARG / ESP_ERR_NO_MEM.
          */
-        static esp_err_t register_all(soulcloud::soulcloud_client &client);
-
-        /** True after a reboot command was acknowledged. */
-        static bool reboot_pending();
+        static esp_err_t register_all(soulcloud::soulcloud_client &client, TaskHandle_t app_task);
 
     private:
         demo_commands() = delete;
 
         static constexpr char TAG[] = "demo_cmds";
 
-        static demo_state s_state;  // ctx passed to every registration
+        static demo_state s_state; // ctx passed to every registration
 
         static esp_err_t get_info(const soulcloud::command_exec *cmd, soulcloud::command_result *out, void *ctx);
         static esp_err_t reboot(const soulcloud::command_exec *cmd, soulcloud::command_result *out, void *ctx);
@@ -61,6 +60,6 @@ namespace soulcloud_demo
         static esp_err_t set_config(const soulcloud::command_exec *cmd, soulcloud::command_result *out, void *ctx);
         static esp_err_t echo(const soulcloud::command_exec *cmd, soulcloud::command_result *out, void *ctx);
 
-        static volatile bool s_reboot_pending;
+        static bool contains_nul(const char *value, size_t len);
     };
-}  // namespace soulcloud_demo
+} // namespace soulcloud_demo
