@@ -30,6 +30,7 @@ esp_err_t demo_network::init()
 
 esp_err_t demo_network::init_wifi()
 {
+#if CONFIG_SOULCLOUD_DEMO_NET_WIFI
     esp_netif_create_default_wifi_sta();
     wifi_init_config_t init_cfg = WIFI_INIT_CONFIG_DEFAULT();
     auto ret = esp_wifi_init(&init_cfg);
@@ -44,6 +45,9 @@ esp_err_t demo_network::init_wifi()
         ESP_LOGE(TAG, "init_wifi: failed: 0x%x %s", ret, esp_err_to_name(ret));
     }
     return ret;
+#else
+    return ESP_ERR_NOT_SUPPORTED;
+#endif
 }
 
 esp_err_t demo_network::init_eth()
@@ -56,7 +60,7 @@ esp_err_t demo_network::init_eth()
     eth_phy_config_t phy_cfg = ETH_PHY_DEFAULT_CONFIG();
     phy_cfg.autonego_timeout_ms = 100;
     esp_eth_mac_t *mac = esp_eth_mac_new_openeth(&mac_cfg);
-    esp_eth_phy_t *phy = esp_eth_phy_new_dp83848(&phy_cfg);
+    esp_eth_phy_t *phy = esp_eth_phy_new_generic(&phy_cfg);
     esp_eth_config_t eth_cfg = ETH_DEFAULT_CONFIG(mac, phy);
 
     esp_eth_handle_t eth = nullptr;
