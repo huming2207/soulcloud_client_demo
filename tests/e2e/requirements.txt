@@ -1,5 +1,0 @@
-# E2E test dependencies (tests/e2e)
-pytest-embedded~=2.0
-pytest-embedded-idf~=2.0
-pytest-embedded-qemu~=2.0
-esptool>=5.0
