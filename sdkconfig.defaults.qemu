@@ -1,0 +1,4 @@
+# QEMU has no Wi-Fi: use the emulated OpenCores Ethernet. The host is 10.0.2.2.
+CONFIG_SOULCLOUD_DEMO_NET_ETH=y
+CONFIG_ETH_USE_OPENETH=y
+CONFIG_SOULCLOUD_API_URL="http://10.0.2.2"

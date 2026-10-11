@@ -1,0 +1,39 @@
+menu "SoulCloud demo"
+
+    choice SOULCLOUD_DEMO_NET
+        prompt "Network interface"
+        default SOULCLOUD_DEMO_NET_WIFI
+        help
+            Wi-Fi for real hardware; OpenCores Ethernet for QEMU, which does
+            not emulate Wi-Fi.
+
+        config SOULCLOUD_DEMO_NET_WIFI
+            bool "Wi-Fi station"
+
+        config SOULCLOUD_DEMO_NET_ETH
+            bool "Ethernet (OpenETH, QEMU only)"
+    endchoice
+
+    config SOULCLOUD_DEMO_WIFI_SSID
+        string "Wi-Fi SSID"
+        depends on SOULCLOUD_DEMO_NET_WIFI
+        default "myssid"
+
+    config SOULCLOUD_DEMO_WIFI_PASSWORD
+        string "Wi-Fi password"
+        depends on SOULCLOUD_DEMO_NET_WIFI
+        default ""
+
+    config SOULCLOUD_DEMO_PAIRING_TOKEN
+        string "Pairing token"
+        default ""
+        help
+            Pairing token from the SoulCloud web console (Devices, Add device).
+            Used once, when the device has no credentials yet. A real product
+            receives it from its provisioning app instead.
+
+    config SOULCLOUD_DEMO_DEVICE_NAME
+        string "Device name"
+        default "SoulCloud demo"
+
+endmenu
