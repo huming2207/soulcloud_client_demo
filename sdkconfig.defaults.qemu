@@ -2,3 +2,6 @@
 CONFIG_SOULCLOUD_DEMO_NET_ETH=y
 CONFIG_ETH_USE_OPENETH=y
 CONFIG_SOULCLOUD_API_URL="http://10.0.2.2"
+
+# QEMU does not emulate the octal PSRAM of the DevKit; run on internal RAM only.
+# CONFIG_SPIRAM is not set
