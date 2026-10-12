@@ -1,0 +1,54 @@
+name: build
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  # JSON reader/writer of the component, built and run on the host.
+  host-test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: JSON host test
+        working-directory: components/soulcloud/test/host
+        run: |
+          g++ -std=c++20 -Wall -Wextra -Werror -Istubs -I../../include -I../../external/jsmn \
+            json_test.cpp ../../src/sc_json.cpp -o json_test
+          ./json_test
+
+  # The demo firmware for the DevKit and for QEMU (Ethernet, no PSRAM).
+  firmware:
+    runs-on: ubuntu-24.04
+    container: espressif/idf:v6.1
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: devkit
+            defaults: sdkconfig.defaults
+          - name: qemu
+            defaults: sdkconfig.defaults;sdkconfig.defaults.qemu
+    name: firmware (${{ matrix.name }})
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Build
+        shell: bash
+        run: |
+          . "$IDF_PATH/export.sh"
+          idf.py -B build-${{ matrix.name }} -D SDKCONFIG=build-${{ matrix.name }}/sdkconfig \
+            -D "SDKCONFIG_DEFAULTS=${{ matrix.defaults }}" build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: soulcloud_demo-${{ matrix.name }}
+          path: |
+            build-${{ matrix.name }}/soulcloud_demo.bin
+            build-${{ matrix.name }}/soulcloud_demo.elf
+            build-${{ matrix.name }}/bootloader/bootloader.bin
+            build-${{ matrix.name }}/partition_table/partition-table.bin
