@@ -11,7 +11,7 @@ jobs:
   host-test:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
       - name: JSON host test
@@ -35,7 +35,7 @@ jobs:
             defaults: sdkconfig.defaults;sdkconfig.defaults.qemu
     name: firmware (${{ matrix.name }})
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
       - name: Build
@@ -44,7 +44,7 @@ jobs:
           . "$IDF_PATH/export.sh"
           idf.py -B build-${{ matrix.name }} -D SDKCONFIG=build-${{ matrix.name }}/sdkconfig \
             -D "SDKCONFIG_DEFAULTS=${{ matrix.defaults }}" build
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: soulcloud_demo-${{ matrix.name }}
           path: |
